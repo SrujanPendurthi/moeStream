@@ -12,9 +12,10 @@ _POOL = ThreadPoolExecutor(8)
 
 
 class Prefetcher:
-    def __init__(self, path, stride):
+    def __init__(self, path, stride, keep=16):
         self.fd = os.open(path, os.O_RDONLY)
         self.stride = stride
+        self.keep = keep  # free buffers kept; a prefill's extra buffers are dropped, not hoarded
         self.pending = {}  # expert -> (buf, future)
         self.free = []
         self.allocated = 0
@@ -50,11 +51,12 @@ class Prefetcher:
         return out
 
     def release(self, buf):
-        self.free.append(buf)
+        if len(self.free) < self.keep:
+            self.free.append(buf)
 
     def drop_pending(self):
         """Forget unused predictions and recycle their buffers."""
         for buf, fut in self.pending.values():
             fut.exception()  # ponytail: waits on stragglers (issued a layer ago, usually done); cancel if it shows in profiles
-            self.free.append(buf)
+            self.release(buf)
         self.pending.clear()

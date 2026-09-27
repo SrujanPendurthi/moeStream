@@ -58,3 +58,10 @@ def test_failed_background_read_retries_once(tmp_path):
 
     pf = Flaky(_file(tmp_path), STRIDE)
     assert (pf.take([2])[2] == 2).all()
+
+
+def test_free_list_is_capped_after_a_big_batch(tmp_path):
+    pf = Prefetcher(_file(tmp_path), STRIDE, keep=2)
+    for buf in pf.take([0, 1, 2, 3, 4, 5]).values():  # prefill-sized fill batch
+        pf.release(buf)
+    assert len(pf.free) == 2

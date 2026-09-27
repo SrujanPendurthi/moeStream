@@ -142,3 +142,11 @@ def test_missing_expert_file_fails_at_load(packed):
     (out / "experts" / "layer_02.bin").unlink()
     with pytest.raises(ValueError, match="layer_02.bin"):
         load(out, slots=3)
+
+
+def test_prefill_does_not_leave_a_slot_budget_of_buffers_behind(packed):
+    out, _ = packed
+    m, _ = load(out, slots=TINY["num_experts"])
+    m(_ids(64))
+    for moe in _moe(m):
+        assert len(moe.io.prefetcher.free) <= 2 * TINY["num_experts_per_tok"]

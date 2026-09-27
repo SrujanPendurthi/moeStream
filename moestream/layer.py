@@ -38,7 +38,8 @@ class StreamingMoE(nn.Module):
         self.io = SimpleNamespace(
             glu=glu, layout=layout, next=None, predictor=None, trace=None, guess=None,
             store=SlotStore(args.num_experts, slots, half_life),
-            prefetcher=Prefetcher(Path(pack_dir) / "experts" / f"layer_{layer:02d}.bin", layout["stride"]),
+            prefetcher=Prefetcher(Path(pack_dir) / "experts" / f"layer_{layer:02d}.bin", layout["stride"],
+                                  keep=2 * self.top_k),
             stats=dict(pred_hit=0, pred_total=0, sync_s=0.0, read_s=0.0, write_s=0.0),
         )
 
