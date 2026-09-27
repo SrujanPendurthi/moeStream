@@ -11,14 +11,26 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from laguna_mlx.dflash import generate_greedy
-
-
-def decode_tok_s(model, prompts, max_tokens, eos):
-    outs, t0 = [], time.perf_counter()
+def decode_tok_s(model, prompts, max_tokens, eos, stats=None):
+    """Greedy decode tok/s with each prompt's prefill excluded; numeric stats(model) deltas over decode only.
+    Tokens equal generate_greedy's."""
+    n, secs, outs, delta = 0, 0.0, [], {}
     for pr in prompts:
-        outs.append(generate_greedy(model, pr, max_tokens, eos))
-    return sum(map(len, outs)) / (time.perf_counter() - t0), outs
+        cache = model.make_cache()
+        t = int(mx.argmax(model(mx.array([pr]), cache=cache)[0, -1]))
+        out = [t]
+        s0 = stats(model) if stats else {}
+        t0 = time.perf_counter()
+        while t not in eos and len(out) < max_tokens:
+            t = int(mx.argmax(model(mx.array([[t]]), cache=cache)[0, -1]))
+            out.append(t)
+        secs += time.perf_counter() - t0
+        n += len(out) - 1
+        for k, v in (stats(model) if stats else {}).items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                delta[k] = delta.get(k, 0) + v - s0[k]
+        outs.append(out)
+    return n / max(secs, 1e-9), outs, delta
 
 
 def long_ctx(model, ids, gen=64, chunk=2048):
@@ -70,15 +82,14 @@ def main():
         model, tok = loader()
         prompts = [tok.apply_chat_template([{"role": "user", "content": q}], add_generation_prompt=True,
                                            enable_thinking=False) for q in PROMPTS[:3]]
-        s0 = stats(model)
-        tps, outs = decode_tok_s(model, prompts, a.max_tokens, tuple(tok.eos_token_ids))
+        tps, outs, d = decode_tok_s(model, prompts, a.max_tokens, tuple(tok.eos_token_ids), stats)
         s1 = stats(model)
-        n = sum(map(len, outs))
+        n = sum(len(o) - 1 for o in outs)
         row = {"label": label, "decode_tok_s": tps, "peak_gpu_gb": mx.get_peak_memory() / 1e9,
-               "hit_rate_decode": (s1["hits"] - s0["hits"]) / max(1, s1["hits"] + s1["misses"] - s0["hits"] - s0["misses"])}
+               "hit_rate_decode": d["hits"] / max(1, d["hits"] + d["misses"])}
         for k in ("sync_s", "read_s", "write_s"):
-            if k in s1:
-                row[f"{k[:-2]}_ms_per_tok"] = 1000 * (s1[k] - s0[k]) / n
+            if k in d:
+                row[f"{k[:-2]}_ms_per_tok"] = 1000 * d[k] / max(1, n)
         if "pred_acc" in s1:
             row["pred_acc"] = s1["pred_acc"]
             row["slots_per_layer"] = [min(s1["slots"].values()), max(s1["slots"].values())]
