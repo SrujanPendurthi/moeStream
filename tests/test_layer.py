@@ -150,3 +150,11 @@ def test_prefill_does_not_leave_a_slot_budget_of_buffers_behind(packed):
     m(_ids(64))
     for moe in _moe(m):
         assert len(moe.io.prefetcher.free) <= 2 * TINY["num_experts_per_tok"]
+
+
+def test_prefill_scores_count_tokens_not_distinct_experts(packed):
+    out, _ = packed
+    m, _ = load(out, slots=TINY["num_experts"], half_life=float("inf"))
+    m(_ids(32))
+    for moe in _moe(m):
+        assert moe.io.store.score.sum() == 32 * TINY["num_experts_per_tok"]

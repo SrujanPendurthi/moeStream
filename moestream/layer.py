@@ -58,7 +58,7 @@ class StreamingMoE(nn.Module):
         idx = np.array(inds)
         if io.trace is not None:
             io.trace.append(idx.reshape(-1, idx.shape[-1]).astype(np.uint8))
-        experts = np.unique(idx).tolist()
+        experts, counts = (a.tolist() for a in np.unique(idx, return_counts=True))
         if io.guess is not None:
             io.stats["pred_hit"] += len(io.guess & set(experts))
             io.stats["pred_total"] += len(experts)
@@ -66,7 +66,8 @@ class StreamingMoE(nn.Module):
         io.store.tick(idx.size // idx.shape[-1])
         y = None
         for g in range(0, len(experts), io.store.slots):
-            yg = self._run(x, idx, experts[g : g + io.store.slots], masked=len(experts) > io.store.slots)
+            yg = self._run(x, idx, experts[g : g + io.store.slots], counts[g : g + io.store.slots],
+                           masked=len(experts) > io.store.slots)
             y = yg if y is None else y + yg
         io.prefetcher.drop_pending()
         if decode and io.next is not None:
@@ -76,9 +77,9 @@ class StreamingMoE(nn.Module):
         y = (y * w[..., None]).sum(axis=-2)
         return y * self.routed_scaling_factor + self.shared_expert(x)
 
-    def _run(self, x, idx, group, masked):
+    def _run(self, x, idx, group, counts, masked):
         io = self.io
-        slot_of, fills = io.store.assign(group)
+        slot_of, fills = io.store.assign(group, counts)
         t0 = time.perf_counter()
         bufs = io.prefetcher.take([e for e, _ in fills])
         t1 = time.perf_counter()

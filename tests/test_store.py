@@ -47,3 +47,10 @@ def test_old_heavy_use_decays_away():
 def test_too_many_experts_raises():
     with pytest.raises(ValueError):
         SlotStore(8, 2).assign([0, 1, 2])
+
+
+def test_assign_counts_weight_the_score():
+    s = SlotStore(8, 2, half_life=float("inf"))
+    s.tick(); s.assign([0, 1], counts=[5, 1])  # a prefill chunk: 0 used by 5 tokens, 1 by one
+    s.tick(); _, f = s.assign([2])
+    assert f == [(2, 1)]

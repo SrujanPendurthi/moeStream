@@ -22,15 +22,15 @@ class SlotStore:
         self.clock += 1
         self.score *= self.decay**n_tokens
 
-    def assign(self, experts):
-        """Make `experts` (distinct) resident. Returns ({expert: slot}, [(expert, slot) to fill])."""
+    def assign(self, experts, counts=1):
+        """Make `experts` (distinct) resident; `counts` = tokens using each. Returns ({expert: slot}, [(expert, slot) to fill])."""
         if len(experts) > self.slots:
             raise ValueError(f"{len(experts)} experts > {self.slots} slots")
         keep = set(experts)
         missing = [e for e in experts if e not in self.expert_slot]
         self.hits += len(experts) - len(missing)
         self.misses += len(missing)
-        self.score[experts] += 1
+        self.score[experts] += counts
         self.last[experts] = self.clock
         fills = list(zip(missing, self._victims(len(missing), keep)))
         for e, s in fills:
