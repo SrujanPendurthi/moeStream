@@ -1,0 +1,76 @@
+"""load(pack_dir) -> (model, tokenizer): Laguna with streamed experts sized to free memory."""
+import json
+import sys
+import warnings
+from pathlib import Path
+
+import mlx.core as mx
+import mlx.nn as nn
+
+from laguna_mlx import laguna
+from moestream.budget import GB, allocate, probe, uniform
+from moestream.layer import StreamingMoE
+
+
+def _per_layer_slots(layers, E, stride, budget, cal, floor):
+    total = int(budget // stride)
+    if total < floor * len(layers):
+        warnings.warn(f"slot budget {budget / GB:.2f} GB is below the floor ({floor} slots x {len(layers)} layers); "
+                      "using the floor anyway")
+    if cal is not None:
+        grid = [min(E, g) for g in cal["grid"]]
+        return allocate({int(l): c for l, c in cal["curves"].items()}, grid, total)
+    return uniform(layers, total, min(floor, E), E)
+
+
+def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=None, target_ctx=32768, floor=16):
+    pack_dir = Path(pack_dir)
+    config = json.loads((pack_dir / "config.json").read_text())
+    layout = json.loads((pack_dir / "layout.json").read_text())
+    q = config["quantization"]
+    E, stride, layers = layout["num_experts"], layout["stride"], layout["layers"]
+    for l in layers:
+        f = pack_dir / "experts" / f"layer_{l:02d}.bin"
+        if not f.exists() or f.stat().st_size != E * stride:
+            raise ValueError(f"{f}: missing or not {E * stride} bytes")
+
+    cal = None
+    if calibration is not None and Path(calibration).exists():
+        cal = json.loads(Path(calibration).read_text())
+        if sorted(int(l) for l in cal["curves"]) != layers:
+            warnings.warn(f"calibration {calibration} does not match layers {layers}; using a uniform split")
+            cal = None
+    half_life = half_life or (cal["half_life"] if cal else 256.0)
+
+    if slots is not None:
+        per = {l: slots for l in layers}
+    else:
+        budget = budget_gb * GB if budget_gb is not None else probe(
+            (pack_dir / "resident.safetensors").stat().st_size, target_ctx=target_ctx)
+        per = _per_layer_slots(layers, E, stride, budget, cal, floor)
+
+    args = laguna.ModelArgs.from_dict(config)
+    model = laguna.Model(args)  # lazy: the full SwitchGLUs it builds are never evaluated
+    dtype = getattr(mx, layout["arrays"]["gate_proj.scales"]["dtype"])
+    moe = []
+    for l in layers:
+        model.layers[l].mlp = StreamingMoE(args, l, pack_dir, layout, per[l], half_life,
+                                           q["group_size"], q["bits"], dtype)
+        moe.append(model.layers[l].mlp)
+    for a, b in zip(moe, moe[1:]):
+        a.io.next = b
+
+    def predicate(p, m):
+        return q[p] if p in q else hasattr(m, "to_quantized")
+
+    nn.quantize(model, group_size=q["group_size"], bits=q["bits"], class_predicate=predicate)
+    model.load_weights(str(pack_dir / "resident.safetensors"), strict=True)
+    mx.eval(model.parameters())
+    n = sum(per.values())
+    print(f"moeStream: {n} slots ({n * stride / GB:.2f} GB), per layer {min(per.values())}-{max(per.values())}, "
+          f"half-life {half_life:g}", file=sys.stderr)
+    tok = None
+    if (pack_dir / "tokenizer.json").exists():
+        from mlx_lm.utils import load_tokenizer
+        tok = load_tokenizer(pack_dir)
+    return model, tok
