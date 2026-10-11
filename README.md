@@ -32,7 +32,18 @@ moeStream time split per token: sync 145.1 ms, read 10.3 ms, write 4.1 ms. Predi
 | 3. `ctx_decode_ratio` >= 0.75 | 1.158 | yes |
 | 4. peak GPU <= budget + resident + KV + 1 GB | 15.50 GB | not evaluated |
 
-Note on 1: on 3 prompts x 128 tokens, outputs first diverge at tokens 19, 104 and 26, where the top-2 logit gap is 0 to 0.375 (about one bf16 step). Consistent with the bf16 near-tie explanation in lagunaLab's `streaming.json`; not verified per-step. Cold-cache results: pending.
+Note on 1: on 3 prompts x 128 tokens, outputs first diverge at tokens 19, 104 and 26, where the top-2 logit gap is 0 to 0.375 (about one bf16 step). Consistent with the bf16 near-tie explanation in lagunaLab's `streaming.json`; not verified per-step.
+
+## Results (cold page cache, `results/bench_cold.json`)
+
+| | lagunaLab slots=32 | moeStream |
+|---|---|---|
+| decode tok/s | 14.37 | 4.39 |
+| hit rate (decode) | 0.547 | 0.932 |
+| peak GPU GB | 5.92 | 17.29 |
+| long-ctx (16000) decode tok/s | 7.77 | 3.08 |
+
+moeStream time split per token: sync 206.4 ms, read 7.9 ms, write 3.2 ms. `speedup_vs_lagunaLab` 0.306 (fail), `ctx_decode_ratio` 0.702 (fail, warm passes), `identical_to_lagunaLab` false.
 
 ## Next
 

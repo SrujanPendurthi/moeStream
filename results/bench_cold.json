@@ -1,0 +1,34 @@
+{
+ "rows": [
+  {
+   "label": "lagunaLab slots=32",
+   "decode_tok_s": 14.373441162667353,
+   "peak_gpu_gb": 5.916307766,
+   "hit_rate_decode": 0.5466972878390202,
+   "ctx_tokens": 16000,
+   "prefill_ctx_tok_s": 56.25413765110834,
+   "decode_ctx_tok_s": 7.771676994619875
+  },
+  {
+   "label": "moeStream",
+   "decode_tok_s": 4.39146935805212,
+   "peak_gpu_gb": 17.28996757,
+   "hit_rate_decode": 0.9315902819839827,
+   "sync_ms_per_tok": 206.35685403745748,
+   "read_ms_per_tok": 7.865056045368079,
+   "write_ms_per_tok": 3.205167463298623,
+   "pred_acc": 0.7057863655200994,
+   "slots_per_layer": [
+    128,
+    256
+   ],
+   "ctx_tokens": 16000,
+   "prefill_ctx_tok_s": 50.83259516426973,
+   "decode_ctx_tok_s": 3.0837038092108573,
+   "identical_to_lagunaLab": false,
+   "speedup_vs_lagunaLab": 0.30552665213242314,
+   "ctx_decode_ratio": 0.7022031939165493
+  }
+ ],
+ "cold": true
+}
