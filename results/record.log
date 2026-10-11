@@ -1,0 +1,14 @@
+moeStream: 2808 slots (4.97 GB), per layer 72-72, half-life 256
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+astropy__astropy-12907 4096
+astropy__astropy-14182 4096
+astropy__astropy-14365 4096
+astropy__astropy-14995 4096
+astropy__astropy-6938 4096
+astropy__astropy-7746 4096
+django__django-10914 4096
+django__django-10924 4096
+django__django-11001 4096
+django__django-11019 4096
+django__django-11039 4096
