@@ -93,6 +93,7 @@ def main():
         budget, lab_slots = equal_memory(a.cap_gb, (Path(a.pack) / "resident.safetensors").stat().st_size,
                                          len(layout["layers"]), layout["stride"], layout["num_experts"])
         a.budget_gb = budget / GB
+        mx.set_memory_limit(int(a.cap_gb * GB))  # .gpu/RULES.md rule 6: hard cap before loading weights
         print(f"cap {a.cap_gb} GB: slot budget {a.budget_gb:.2f} GB, lagunaLab slots={lab_slots}", flush=True)
     import moestream.layer
     moestream.layer.EVAL_WRITES = a.eval_writes
