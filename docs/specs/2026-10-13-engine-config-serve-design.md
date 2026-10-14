@@ -116,9 +116,14 @@ It is mlx-lm's OpenAI-compatible server with the loader swapped, the same shape 
 - The loader calls `moestream.load.load(config)` and adds the extra EOS ids from
   `generation_config.json` (id 24, `</assistant>`), as lagunaLab's loader does.
 - Defaults passed to mlx-lm: `--port` from config, `--max-tokens 4096`, `--prompt-cache-size 6`,
-  and `--prompt-cache-bytes` equal to the KV reservation, so stored conversation caches stay
-  inside the memory the budget set aside for KV.
-
+  `--prompt-cache-bytes` equal to one session of KV, and `--decode-concurrency 1
+  --prompt-concurrency 1`, since the budget reserves KV for one client.
+- mlx-lm 0.31.3 builds its prompt cache without a byte limit and applies `--prompt-cache-bytes`
+  only on its batched path, which quantized KV never takes. `serve.py` patches the cache class so
+  stored conversation caches are capped at one session of KV. The served budget therefore reserves
+  KV for two sessions: the live one plus the stored copies.
+- The engine loads once. mlx-lm reloads whenever a request names a different model (pi sends
+  `Laguna-XS-2.1`); the loader returns the already-loaded engine instead of loading a second one.
 - `--chat-template-args '{"enable_thinking": <thinking>}'`. Laguna's chat template already
   implements reasoning (`<think>` blocks, `reasoning_content` carried across turns) and mlx-lm's
   server already separates it from the answer; nothing new is built. A request that sends its own

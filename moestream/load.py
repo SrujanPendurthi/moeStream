@@ -28,8 +28,9 @@ def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=No
          target_ctx=32768, kv_bits=0, eviction="lfu", floor=16):
     if isinstance(pack_dir, EngineConfig):
         c = pack_dir
+        # served: KV for the live session plus one stored conversation cache (tools/serve.py caps those)
         return load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
-                    target_ctx=c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction, floor=floor)
+                    target_ctx=2 * c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction, floor=floor)
     pack_dir = Path(pack_dir)
     config = json.loads((pack_dir / "config.json").read_text())
     layout = json.loads((pack_dir / "layout.json").read_text())

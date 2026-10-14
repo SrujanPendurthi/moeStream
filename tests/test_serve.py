@@ -31,3 +31,33 @@ def test_every_flag_is_one_mlx_lm_server_accepts():
     src = inspect.getsource(mlx_lm.server)
     for f in server_argv(EngineConfig(pack_dir="/p"))[::2]:
         assert f'"{f}"' in src, f
+
+
+def test_one_request_at_a_time_since_the_budget_reserves_one_session():
+    a = server_argv(EngineConfig(pack_dir="/p"))
+    assert _flag(a, "--decode-concurrency") == "1" and _flag(a, "--prompt-concurrency") == "1"
+
+
+def test_stored_prompt_caches_are_capped_at_one_session_of_kv():
+    from types import SimpleNamespace
+
+    from mlx_lm.models.cache import LRUPromptCache
+
+    from tools.serve import patch_server
+
+    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None)
+    patch_server(server, EngineConfig(pack_dir="/p", kv_bits=8, context_tokens=1000))
+    assert server.LRUPromptCache(6).max_bytes == 40960 * 136 // 256 * 1000
+
+
+def test_loader_loads_once_whatever_model_name_a_client_sends(monkeypatch):
+    from types import SimpleNamespace
+
+    from tools.serve import make_loader
+
+    calls = []
+    tok = SimpleNamespace(eos_token_ids={2})
+    monkeypatch.setattr("moestream.load.load", lambda cfg: calls.append(cfg) or ("model", tok))
+    loader = make_loader(EngineConfig(pack_dir="/p"))
+    first = loader("/p")
+    assert loader("Laguna-XS-2.1") is first and len(calls) == 1
