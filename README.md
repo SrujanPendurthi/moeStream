@@ -2,6 +2,8 @@
 
 Streams MoE expert weights from disk on Apple Silicon, with a decayed-LFU slot cache, next-layer lookahead prefetch and a per-layer slot budget calibrated offline from recorded routing. Phase 1 compares it against lagunaLab's streaming loader on Laguna-XS-2.1.
 
+Documentation: [docs/](docs/README.md): architecture, configuration, serving and pi, the self-tuning runtime, tools, development.
+
 ## Run
 
 ```bash
