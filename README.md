@@ -68,6 +68,27 @@ The original gate ("decode >= lagunaLab at equal or lower memory" against laguna
 2. 16k-context decode faster than lagunaLab.
 3. 16k prefill faster than lagunaLab.
 
-Data so far was measured at **unequal memory** (lagunaLab 32 slots, 5.9 GB; moeStream 128 slots, 12.8 GB), so it does not decide the gate: short-prompt decode 0.90x and 0.94x, 16k decode 1.37x and 1.43x, prefill 1.55x. Equal-memory verdict: pending.
+Data so far was measured at **unequal memory** (lagunaLab 32 slots, 5.9 GB; moeStream 128 slots, 12.8 GB), so it does not decide the gate: short-prompt decode 0.90x and 0.94x, 16k decode 1.37x and 1.43x, prefill 1.55x.
+
+### Equal-memory verdict (2026-10-14)
+
+**20 GB cap (`results/bench_cap20.log`): aborted, thrashing after about 35 min, no moeStream result.** lagunaLab's half finished but collapsed: 239 slots, 15.7 tok/s short decode, 16k prefill 51.9 tok/s, 16k decode **0.16 tok/s**, peak GPU 20.9 GB. moeStream then loaded 9280 slots (16.4 GB) and sat paging (process state stuck, about 8% CPU, 86M pageins, footprint about 18 GB) without tripping the watchdog (swap 2.4 GB, under its 8 GB limit), so it was killed by PID. Watchdog peaks for the run: swap 3510 MB, footprint 20480 MB. A 20 GB cap is not usable on this 24 GB machine.
+
+**14.4 GB cap (`results/bench_cap14.4.json`), the run the verdict rests on:**
+
+| | lagunaLab (157 slots) | moeStream (128-256 slots per layer) | ratio |
+|---|---|---|---|
+| short-prompt decode | 14.09 tok/s | 12.68 tok/s | 0.90x |
+| 16k prefill | 93.1 tok/s | 97.6 tok/s | 1.05x |
+| 16k decode | 10.31 tok/s | 12.83 tok/s | 1.24x |
+| peak GPU | 14.52 GB | 14.19 GB | |
+| decode hit rate | 91.6% | 90.5% | |
+
+Watchdog peaks for the whole run (both engines, one process): swap 160 MB, footprint 15360 MB.
+
+Gate: **passes at 14.4 GB**, with short-prompt decode at the edge of item 1 (10.0% slower). Items 2 and 3 pass. The footprint is about 1.2 GB above moeStream's peak GPU: the prefetcher's staging buffers (numpy, up to 16 free expert-sized buffers per layer, plus those in flight) live outside the GPU budget and are not counted in `memory_gb`. moeStream decode time per token: sync 53 ms, read 8.7 ms, write 3.9 ms.
+
+Consequence: the `memory_gb = 20.0` default in `moestream.toml` should come down to about 14. q8 KV at 128k needs 2.85 GB of KV, so at 14 GB the slots get about 9 GB (about 130 per layer) instead of 12.1 GB.
+
 
 Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds the explicit memory cap in place of the free-page probe.

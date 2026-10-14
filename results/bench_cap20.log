@@ -1,0 +1,7 @@
+cap 20.0 GB: slot budget 16.50 GB, lagunaLab slots=239
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+{'label': 'lagunaLab slots=239', 'decode_tok_s': 15.666127546311097, 'peak_gpu_gb': 20.91161769, 'hit_rate_decode': 0.9624554142270678, 'ctx_tokens': 16000, 'prefill_ctx_tok_s': 51.93621696861423, 'decode_ctx_tok_s': 0.15955701908876402}
+moeStream: 9280 slots (16.42 GB), per layer 192-256, half-life 64, eviction lfu, kv 16-bit
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+tools/watch.sh: line 21: 75371 Terminated: 15          "$@"
+watch: peak swap 3510 MB, peak footprint 20480 MB
