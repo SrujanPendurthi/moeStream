@@ -1,0 +1,186 @@
+{
+ "sessions": [
+  {
+   "file": "astropy__astropy-12907.jsonl",
+   "turns": 49,
+   "final_tokens": 71005
+  },
+  {
+   "file": "astropy__astropy-14182.jsonl",
+   "turns": 55,
+   "final_tokens": 74705
+  },
+  {
+   "file": "astropy__astropy-14365.jsonl",
+   "turns": 59,
+   "final_tokens": 56878
+  },
+  {
+   "file": "astropy__astropy-14995.jsonl",
+   "turns": 34,
+   "final_tokens": 77449
+  },
+  {
+   "file": "astropy__astropy-6938.jsonl",
+   "turns": 59,
+   "final_tokens": 50537
+  },
+  {
+   "file": "astropy__astropy-7746.jsonl",
+   "turns": 60,
+   "final_tokens": 65993
+  },
+  {
+   "file": "django__django-10914.jsonl",
+   "turns": 93,
+   "final_tokens": 77950
+  },
+  {
+   "file": "django__django-10924.jsonl",
+   "turns": 98,
+   "final_tokens": 82104
+  },
+  {
+   "file": "django__django-11001.jsonl",
+   "turns": 76,
+   "final_tokens": 79998
+  },
+  {
+   "file": "django__django-11019.jsonl",
+   "turns": 14,
+   "final_tokens": 42683
+  },
+  {
+   "file": "django__django-11039.jsonl",
+   "turns": 93,
+   "final_tokens": 82543
+  }
+ ],
+ "kv_bits": 8,
+ "ram_cap_tokens": 131072,
+ "ssd_cap_gb": 20.0,
+ "prefill_tok_s": 100.0,
+ "ssd_bytes_s": 2000000000.0,
+ "rows": [
+  {
+   "workload": "one session at a time",
+   "tier": "ram only",
+   "prompt": 29306736,
+   "from_ram": 28845254,
+   "from_ssd": 0,
+   "recomputed": 461482,
+   "ssd_written": 0,
+   "snapshots": 0,
+   "est_prompt_s": 4615,
+   "ssd_written_gb": 0.0
+  },
+  {
+   "workload": "one session at a time",
+   "tier": "ram + ssd",
+   "prompt": 29306736,
+   "from_ram": 28845254,
+   "from_ssd": 0,
+   "recomputed": 461482,
+   "ssd_written": 761845,
+   "snapshots": 690,
+   "est_prompt_s": 4615,
+   "ssd_written_gb": 60.0
+  },
+  {
+   "workload": "one session + restart",
+   "tier": "ram only",
+   "prompt": 29306736,
+   "from_ram": 28799600,
+   "from_ssd": 0,
+   "recomputed": 507136,
+   "ssd_written": 0,
+   "snapshots": 0,
+   "est_prompt_s": 5071,
+   "ssd_written_gb": 0.0
+  },
+  {
+   "workload": "one session + restart",
+   "tier": "ram + ssd",
+   "prompt": 29306736,
+   "from_ram": 28799600,
+   "from_ssd": 45654,
+   "recomputed": 461482,
+   "ssd_written": 761845,
+   "snapshots": 690,
+   "est_prompt_s": 4615,
+   "ssd_written_gb": 60.0
+  },
+  {
+   "workload": "2 interleaved",
+   "tier": "ram only",
+   "prompt": 29306736,
+   "from_ram": 25553079,
+   "from_ssd": 0,
+   "recomputed": 3753657,
+   "ssd_written": 0,
+   "snapshots": 0,
+   "est_prompt_s": 37537,
+   "ssd_written_gb": 0.0
+  },
+  {
+   "workload": "2 interleaved",
+   "tier": "ram + ssd",
+   "prompt": 29306736,
+   "from_ram": 25553079,
+   "from_ssd": 3292175,
+   "recomputed": 461482,
+   "ssd_written": 761845,
+   "snapshots": 690,
+   "est_prompt_s": 4651,
+   "ssd_written_gb": 60.0
+  },
+  {
+   "workload": "3 interleaved",
+   "tier": "ram only",
+   "prompt": 29306736,
+   "from_ram": 16436797,
+   "from_ssd": 0,
+   "recomputed": 12869939,
+   "ssd_written": 0,
+   "snapshots": 0,
+   "est_prompt_s": 128699,
+   "ssd_written_gb": 0.0
+  },
+  {
+   "workload": "3 interleaved",
+   "tier": "ram + ssd",
+   "prompt": 29306736,
+   "from_ram": 16436797,
+   "from_ssd": 12408457,
+   "recomputed": 461482,
+   "ssd_written": 761845,
+   "snapshots": 690,
+   "est_prompt_s": 4750,
+   "ssd_written_gb": 60.0
+  },
+  {
+   "workload": "3 interleaved + restart",
+   "tier": "ram only",
+   "prompt": 29306736,
+   "from_ram": 16373541,
+   "from_ssd": 0,
+   "recomputed": 12933195,
+   "ssd_written": 0,
+   "snapshots": 0,
+   "est_prompt_s": 129332,
+   "ssd_written_gb": 0.0
+  },
+  {
+   "workload": "3 interleaved + restart",
+   "tier": "ram + ssd",
+   "prompt": 29306736,
+   "from_ram": 16373541,
+   "from_ssd": 12471713,
+   "recomputed": 461482,
+   "ssd_written": 761845,
+   "snapshots": 690,
+   "est_prompt_s": 4751,
+   "ssd_written_gb": 60.0
+  }
+ ]
+}

@@ -107,3 +107,42 @@ Served with `memory_gb = 14.0`, q8 KV, 128k context and tuning off, under the wa
 | `thinking = false` | 3456 | 20 s, no reasoning, stopped by itself at 268 tokens | 8.5 GB | 273 MB |
 
 The 3-turn pi session on a small repo (run the tests, fix the bug, add an empty-list test) completed with tool calls. pytest at the end shows 2 passed. The turns took 67, 21 and 71 s. Prefix caching works between turns: after the first 1388-token prompt, requests processed only 22-259 new tokens. bf16 KV at 128k leaves almost no room for slots, which is why q8 is the default.
+
+## SSD tier for the prompt cache: simulation (2026-10-14, `tools/kv_tier_sim.py`, `results/kv_tier_sim.json`)
+
+Question: when a session's KV is no longer in the RAM prompt cache (another session pushed it out, or
+the server restarted), would restoring it from SSD beat re-processing the prompt?
+
+Method: token-level bookkeeping, no model load. The 11 captured agent sessions (14-98 turns, 43k-83k
+tokens at the end, 690 turns in all) were rendered through Laguna's chat template turn by turn, as pi
+sends them. The RAM cache is mlx-lm's LRU prompt cache with `tools/serve.py`'s cap of one session of
+q8 KV (131,072 tokens). The SSD tier holds each session's latest turn-end snapshot (q8, 20 GB cap). An
+entry is reused only when it is an exact prefix of the new prompt; that held at every turn of every
+session (no template-induced breaks). Times assume 100 tok/s prefill (generous at 60k+ context) and
+2 GB/s SSD reads.
+
+| Workload | RAM only: recomputed | RAM + SSD: recomputed | RAM only, est. prompt time | RAM + SSD |
+|---|---|---|---|---|
+| one session at a time | 0.46 M tokens | 0.46 M | 77 min | 77 min |
+| one session, server restart midway | 0.51 M | 0.46 M | 85 min | 77 min |
+| 2 sessions interleaved | 3.75 M | 0.46 M | 10.4 h | 78 min |
+| 3 sessions interleaved | 12.87 M | 0.46 M | 35.8 h | 79 min |
+| 3 interleaved, restart midway | 12.93 M | 0.46 M | 35.9 h | 79 min |
+
+Totals are over all 11 sessions (29.3 M prompt tokens served). 0.46 M is the floor: first prompts plus
+each turn's new tool output, which must be processed anyway. With the SSD tier every workload reaches
+it.
+
+- **One pi session at a time:** the RAM cache already reuses everything. The SSD tier only saves the
+  re-prefill after a restart (one session's context, up to about 80k tokens, about 13 minutes).
+- **Interleaved sessions** (parallel agents, harness evals, GRPO rollouts): the one-session RAM cap
+  thrashes. Two sessions recompute 8x more prompt tokens, three sessions 28x more. The SSD tier
+  brings both back to the floor.
+- **Cost:** 60 GB written for the 11 sessions, about 87 MB per turn. Most of it is the sliding-window
+  layers' state (63 MB, rewritten whole at every turn end); the full-attention KV is append-only.
+  Live storage: about 1.6 GB per 75k-token session at q8.
+
+Recommendation: **build it**, before the harness and GRPO work that will run sessions side by side.
+For single-session pi use alone it would only save restarts. Spec first; mlx-lm's
+`save_prompt_cache` and `load_prompt_cache` are the starting point.
+
