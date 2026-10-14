@@ -290,3 +290,27 @@ def test_hook_error_detaches_tuning_and_decode_goes_on(tmp_path):
     with pytest.warns(UserWarning, match="tuning off"):
         m(mx.array([[1, 2, 3]]))
     assert m.layers[-1].mlp.io.hook is None
+
+
+def test_replay_knob_goes_before_a_live_knob_next_in_turn(tmp_path):
+    cur = {"v": "old"}
+    replay = Knob("policy", "replay", lambda: "lfu", lambda v: None)
+    tuner = Tuner([replay, _live(cur)], _replay_snap, tmp_path, "fp", pool=Now())
+    tuner.next_i = 1  # the live knob's turn, as after a replay trial
+    tuner.idle()
+    assert tuner.trial["knob"] == "policy"
+
+
+def test_live_trial_that_keeps_gaining_pairs_still_ends_at_the_cap(tmp_path):
+    cur, t = {"v": "old"}, [0.0]
+    tuner = Tuner([_live(cur)], lambda: None, tmp_path, "fp", clock=lambda: t[0])
+    tuner.idle()
+    tuner.trial["pairs"] = [(1.0, 0.9)] * 3
+    t[0] += Tuner.AB_MAX + 1
+    tuner.trial["last_pair"] = t[0]  # a pair just finished: the no-pair timeout alone would not end it
+    tuner.idle()
+    assert tuner.trial is None and cur["v"] == "old" and "x" not in tuner.rejected
+
+
+def test_ab_pair_fits_in_an_agent_turn():
+    assert Tuner.WARM + 4 * Tuner.WINDOW <= 160  # agent replies average about 100-200 tokens

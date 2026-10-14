@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from moestream.tune import Ring, ab_keep, replay_rate, replay_trial
@@ -68,3 +69,25 @@ def test_ring_is_one_preallocated_buffer():
     assert r.buf.shape == (10, 2) and r.rows()[:, 0].tolist() == [35, 36, 37, 38, 39]
     r.append(np.arange(16, dtype=np.uint8).reshape(8, 2))  # a prefill chunk bigger than cap
     assert r.rows()[:, 0].tolist() == [6, 8, 10, 12, 14]
+
+
+def test_replay_worker_exits_when_its_server_dies():
+    import subprocess
+    import sys
+    import time
+
+    code = ("import os, time; from moestream.tune import _worker_init; "
+            "pid = os.fork()\n"
+            "if pid == 0:\n"
+            "    _worker_init(os.getppid(), poll=0.05); time.sleep(30); os._exit(1)\n"
+            "print(pid, flush=True)")  # parent exits at once, as a killed server would
+    child = int(subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout)
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    os.kill(child, 9)
+    raise AssertionError("worker outlived its server")

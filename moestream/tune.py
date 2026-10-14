@@ -90,9 +90,10 @@ def _plain(o):
 
 
 class Tuner:
-    WINDOW = 64       # tokens per A/B window
-    WARM = 64         # decode tokens after a break (prefill, idle) that only re-warm the cache: not measured
+    WINDOW = 32       # tokens per A/B window: a warm-up and one pair fit in a 160-token reply
+    WARM = 32         # decode tokens after a break (prefill, idle) that only re-warm the cache: not measured
     AB_TIMEOUT = 600  # seconds without a completed pair before a live trial ends with no decision
+    AB_MAX = 900      # seconds a live trial may run in all: short agent turns rarely finish 8 pairs
     STATS = 256       # tokens per logged stats window
     MIN_GAIN = 0.01   # replay: candidate miss rate must be at least 1% lower
 
@@ -167,7 +168,8 @@ class Tuner:
             self._start_next()
         elif t["phase"] == "replay" and t["future"].done():
             self._replay_done(t)
-        elif t["phase"] == "ab" and self.clock() - t["last_pair"] > self.AB_TIMEOUT:
+        elif t["phase"] == "ab" and (self.clock() - t["last_pair"] > self.AB_TIMEOUT
+                                     or self.clock() - t["started"] > self.AB_MAX):
             self.trial = None  # traffic too short for pairs: no decision, retried on its next turn
             self._set(t["knob"], t["old"], disable=False)
             self.log({"knob": t["knob"], "cancelled": "ab timeout", "pairs": len(t["pairs"])})
@@ -186,9 +188,10 @@ class Tuner:
     def _start_next(self):
         if not self.trial_on:
             return
-        for _ in range(len(self.order)):
-            name = self.order[self.next_i]
-            self.next_i = (self.next_i + 1) % len(self.order)
+        turn = self.order[self.next_i:] + self.order[:self.next_i]
+        turn.sort(key=lambda n: self.knobs[n].tier != "replay")  # simulation needs no traffic: never queued behind A/B
+        for name in turn:
+            self.next_i = (self.order.index(name) + 1) % len(self.order)
             k = self.knobs[name]
             if name in self.disabled or not k.ready() or not self._eligible(name):
                 continue
@@ -211,7 +214,7 @@ class Tuner:
                 if new is None or new == old:
                     continue
                 self.trial = dict(knob=name, old=old, new=new, phase="ab", arm="old", pending=None, pairs=[],
-                                  last_pair=self.clock())
+                                  last_pair=self.clock(), started=self.clock())
             return
 
     def _eligible(self, name):
@@ -317,6 +320,20 @@ def fingerprint(cfg):
     return hashlib.sha256(layout + json.dumps([cfg.memory_gb, cfg.kv_bits, cfg.context_tokens]).encode()).hexdigest()[:16]
 
 
+def _worker_init(server_pid, poll=2.0):
+    """Replay worker: low priority, and exits when the server dies (a killed server would orphan it)."""
+    import threading
+
+    os.nice(10)
+
+    def watch():
+        while os.getppid() == server_pid:
+            time.sleep(poll)
+        os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def start(model, tok, cfg, prompts=None, probe_tokens=2048):
     """Wire tuning into a loaded engine: knobs, routing traces, quality guard, pressure guard, saved state."""
     from moestream.guard import Guard
@@ -355,7 +372,7 @@ def start(model, tok, cfg, prompts=None, probe_tokens=2048):
         layout = (Path(cfg.pack_dir) / "layout.json").read_bytes()
         key = hashlib.sha256(layout + json.dumps([cfg.kv_bits, prompts, probe_tokens]).encode()).hexdigest()[:16]
         guard = Guard(model, prompts, d / "reference.npz", key, total=probe_tokens)
-        pool = ProcessPoolExecutor(2, initializer=os.nice, initargs=(10,))
+        pool = ProcessPoolExecutor(2, initializer=_worker_init, initargs=(os.getpid(),))
     tuner = Tuner(knobs, snapshot, d, fingerprint(cfg), guard=guard, pool=pool, counts=counts, trial=cfg.tune)
     pressure.log, pressure.cancel = tuner.log, lambda: tuner.cancel("slots")
     if guard is None or guard.ready:
