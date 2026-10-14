@@ -1,6 +1,6 @@
 """Decode speed, hit rate, prediction accuracy and time split: lagunaLab streaming vs moeStream.
 
-PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base] [--no-prefetch]
+PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base] [--no-prefetch] [--cap-gb X]
 Loads real weights one model at a time: message the other sessions and wait for a go-ahead first.
 """
 import argparse
@@ -10,6 +10,15 @@ import time
 from pathlib import Path
 
 import mlx.core as mx
+
+from moestream.budget import GB, slot_budget_bytes
+
+
+def equal_memory(cap_gb, resident, n_layers, stride, num_experts):
+    """Slot bytes left under a total cap, and the uniform lagunaLab slot count that spends the same bytes."""
+    budget = slot_budget_bytes(cap_gb * GB, cap_gb * GB, resident, headroom=0)
+    return budget, min(num_experts, budget // (n_layers * stride))
+
 
 def decode_tok_s(model, prompts, max_tokens, eos, stats=None):
     """Greedy decode tok/s with each prompt's prefill excluded; numeric stats(model) deltas over decode only.
@@ -75,7 +84,16 @@ def main():
     p.add_argument("--eval-writes", action="store_true", help="diagnostic: time slot writes in write_s")
     p.add_argument("--no-base", action="store_true", help="diagnostic: skip the lagunaLab baseline run")
     p.add_argument("--no-prefetch", action="store_true", help="diagnostic: no lookahead prediction or prefetch")
+    p.add_argument("--cap-gb", type=float, default=None,
+                   help="equal memory: both loaders get the slot bytes left under this total cap")
     a = p.parse_args()
+    lab_slots = 32
+    if a.cap_gb:
+        layout = json.loads((Path(a.pack) / "layout.json").read_text())
+        budget, lab_slots = equal_memory(a.cap_gb, (Path(a.pack) / "resident.safetensors").stat().st_size,
+                                         len(layout["layers"]), layout["stride"], layout["num_experts"])
+        a.budget_gb = budget / GB
+        print(f"cap {a.cap_gb} GB: slot budget {a.budget_gb:.2f} GB, lagunaLab slots={lab_slots}", flush=True)
     import moestream.layer
     moestream.layer.EVAL_WRITES = a.eval_writes
     ctx_text = Path("../lagunaLab/tests/reference/modeling_laguna.py").read_text()
@@ -110,7 +128,7 @@ def main():
 
     base = None
     if not a.no_base:
-        base, base_outs = run("lagunaLab slots=32", lambda: load_streaming(a.pack, 32), lab_stats)
+        base, base_outs = run(f"lagunaLab slots={lab_slots}", lambda: load_streaming(a.pack, lab_slots), lab_stats)
     def load_mine():
         model, tok = load(a.pack, slots=a.slots, budget_gb=a.budget_gb, calibration=a.calibration)
         if a.no_prefetch:
@@ -124,7 +142,7 @@ def main():
         mine["identical_to_lagunaLab"] = my_outs == base_outs
         mine["speedup_vs_lagunaLab"] = mine["decode_tok_s"] / base["decode_tok_s"]
     mine["ctx_decode_ratio"] = mine["decode_ctx_tok_s"] / mine["decode_tok_s"]
-    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "") + ("_noprefetch" if a.no_prefetch else "")
+    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "") + ("_noprefetch" if a.no_prefetch else "") + (f"_cap{a.cap_gb:g}" if a.cap_gb else "")
     out = Path("results") / f"bench{tag}.json"
     out.write_text(json.dumps({"rows": [r for r in (base, mine) if r], "cold": a.cold}, indent=1))
 

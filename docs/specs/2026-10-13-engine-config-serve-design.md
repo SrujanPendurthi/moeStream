@@ -13,9 +13,10 @@ Done means: a multi-turn pi session with tool calls completes against the moeStr
 changing a setting in the file changes what the engine does.
 
 This is sub-project 1 of the roadmap (speed gate, **engine**, parity eval, control UI,
-self-tuning, refine loop). It assumes sub-project 0 has brought decode speed to at least
-lagunaLab's; if the fix there changes how slots are stored, only `layer.py` internals move, not
-anything below.
+self-tuning, refine loop). It assumes sub-project 0's revised gate passes: at the 20 GB cap,
+with lagunaLab given the same slot memory, moeStream is within about 10% on short-prompt decode
+and faster on 16k-context decode and prefill (see README). If a fix changes how slots are
+stored, only `layer.py` internals move, not anything below.
 
 ## Not in scope
 

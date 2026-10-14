@@ -60,6 +60,14 @@ Each row below comes from a single run with its own lagunaLab baseline. The base
 
 At 128 slots and 12.8 GB, moeStream is 0.90-0.94x lagunaLab on short-prompt decode, 1.37-1.43x on 16k-context decode, and about 1.5x on prefill. Lookahead prefetch roughly breaks even. It hides about 10 ms of reads but adds about 18 ms of sync per token.
 
-## Next
+## Gate (revised 2026-10-13)
 
-The gate as written ("decode >= lagunaLab at equal or lower memory") fails. moeStream trades memory for long-context speed. Rewording the gate is the user's decision. Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds an explicit memory cap in place of the free-page probe.
+The original gate ("decode >= lagunaLab at equal or lower memory" against lagunaLab at 32 slots) is replaced. New gate, at the 20 GB cap, with lagunaLab given the same slot memory (`tools.bench --cap-gb 20`):
+
+1. Short-prompt decode within about 10% of lagunaLab.
+2. 16k-context decode faster than lagunaLab.
+3. 16k prefill faster than lagunaLab.
+
+Data so far was measured at **unequal memory** (lagunaLab 32 slots, 5.9 GB; moeStream 128 slots, 12.8 GB), so it does not decide the gate: short-prompt decode 0.90x and 0.94x, 16k decode 1.37x and 1.43x, prefill 1.55x. Equal-memory verdict: pending.
+
+Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds the explicit memory cap in place of the free-page probe.

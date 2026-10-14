@@ -6,7 +6,7 @@ import numpy as np
 from moestream.load import load
 from scripts.pack_experts import pack
 from tests.tiny import TINY, quantized_model_dir
-from tools.bench import decode_tok_s, long_ctx
+from tools.bench import decode_tok_s, equal_memory, long_ctx
 
 
 def test_bench_helpers_run_on_tiny(tmp_path):
@@ -45,3 +45,11 @@ def test_decode_speed_and_stats_exclude_prefill():
     assert [len(o) for o in outs] == [5, 5]
     assert tps > 100                # 0.6 s of prefill would cap it near 13 tok/s
     assert delta == {"hits": 8}     # 4 decode steps per prompt; non-numeric keys skipped
+
+
+def test_equal_memory_gives_both_loaders_the_same_slot_bytes():
+    from moestream.budget import GB, KV_BYTES_PER_TOKEN
+    budget, lab = equal_memory(20, 1 * GB, 39, 1769472, 256)
+    assert budget == 20 * GB - 1 * GB - KV_BYTES_PER_TOKEN * 32768 - 1 * GB
+    assert lab == budget // (39 * 1769472) and lab * 39 * 1769472 <= budget
+    assert equal_memory(200, 1 * GB, 39, 1769472, 256)[1] == 256  # clamps to num_experts
