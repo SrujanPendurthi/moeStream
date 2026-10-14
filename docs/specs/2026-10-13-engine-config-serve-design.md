@@ -30,7 +30,7 @@ is added with the UI, which is the first thing that needs it.
 
 ```toml
 pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
-memory_gb = 16.0          # peak GPU memory the engine may use; omit to probe free memory
+memory_gb = 20.0          # peak GPU memory the engine may use; omit to probe free memory
 context_tokens = 32768    # longest session the KV reservation is sized for
 kv_bits = 0               # 0 = bf16 (lossless), 8 or 4 = quantized
 eviction = "lfu"          # lfu | lru | fifo
@@ -56,6 +56,19 @@ fixed costs. Two changes:
   each term in the message.
 - **KV bytes depend on `kv_bits`.** New `kv_bytes_per_token(bits)`: 40,960 at bf16, times 136/256
   at 8-bit, times 72/256 at 4-bit (stored sizes from lagunaLab's KV compression spec).
+
+**Default cap: 20 GB** (your decision, relayed by the coordinator session; lagunaLab's
+watchdog uses the same 20 GB footprint cap). On this 24 GB machine that leaves little for the OS
+and other jobs. Evidence from the speed gate (sub-project 0):
+
+| run | slots | peak GPU | decode tok/s | slot write per fill |
+|---|---|---|---|---|
+| shared machine, swap in use | 128-256 (probe) | 16.1 GB | 4.12 | 5.5 ms |
+| fresh machine after reboot | 128 uniform | 12.8 GB | 13.91 | 0.33 ms |
+
+The second row is the known-good operating point. Above it, slot writes slow down about 17x
+once macOS starts paging, so the load-time warning (probe says less than `memory_gb` is free)
+prints both numbers and this operating point.
 
 The split of those slots across layers is unchanged: `allocate` from the calibration file, or
 `uniform` without one.
