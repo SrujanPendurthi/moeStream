@@ -1,0 +1,185 @@
+import json
+from concurrent.futures import Future
+
+import numpy as np
+import pytest
+
+from moestream.tune import Knob, Tuner
+
+
+class Now:
+    """Runs replay work inline: futures come back done."""
+
+    def submit(self, fn, *a):
+        f = Future()
+        try:
+            f.set_result(fn(*a))
+        except Exception as e:
+            f.set_exception(e)
+        return f
+
+
+def _live(cur, propose="new", **kw):
+    return Knob("x", "live", lambda: cur["v"], lambda v: cur.update(v=v), lambda: propose, **kw)
+
+
+def _ab(tmp_path, slow_pairs):
+    cur, t = {"v": "old"}, [0.0]
+    tuner = Tuner([_live(cur)], lambda: None, tmp_path, "fp", clock=lambda: t[0])
+    tuner.idle()
+    tuner.on_token()
+    while tuner.trial is not None:
+        p = len(tuner.trial["pairs"])
+        t[0] += 1.0 if cur["v"] == "old" else (1.1 if p < slow_pairs else 0.9)
+        tuner.on_token()
+    return cur["v"], tuner
+
+
+def test_live_candidate_kept_at_seven_of_eight(tmp_path):
+    assert _ab(tmp_path, 1)[0] == "new"
+
+
+def test_live_candidate_reverted_at_six_of_eight(tmp_path):
+    v, tuner = _ab(tmp_path, 2)
+    assert v == "old"
+    rec = [json.loads(l) for l in (tmp_path / "log.jsonl").read_text().splitlines()]
+    trials = [r for r in rec if "kept" in r]  # stats windows share the log
+    assert trials[-1]["knob"] == "x" and trials[-1]["kept"] is False
+
+
+def test_interrupt_drops_half_pair_and_reverts_arm(tmp_path):
+    cur, t = {"v": "old"}, [0.0]
+    tuner = Tuner([_live(cur)], lambda: None, tmp_path, "fp", clock=lambda: t[0])
+    tuner.idle()
+    for _ in range(Tuner.WINDOW + 1):
+        t[0] += 1; tuner.on_token()
+    assert cur["v"] == "new"              # candidate arm running
+    tuner.interrupt()
+    assert cur["v"] == "old" and tuner.trial["pending"] is None and tuner.trial["pairs"] == []
+
+
+def test_rejected_knob_waits_before_retry(tmp_path):
+    v, tuner = _ab(tmp_path, 8)
+    tuner.retry_tokens = 10
+    tuner.idle()
+    assert tuner.trial is None
+    for _ in range(11):
+        tuner.on_token()
+    tuner.idle()
+    assert tuner.trial is not None
+
+
+def test_knob_not_ready_is_skipped(tmp_path):
+    cur = {"v": "old"}
+    tuner = Tuner([_live(cur, ready=lambda: False)], lambda: None, tmp_path, "fp")
+    tuner.idle()
+    assert tuner.trial is None
+
+
+def test_failing_apply_disables_knob_and_reverts(tmp_path):
+    cur = {"v": "old"}
+
+    def apply(v):
+        if v == "new":
+            raise RuntimeError("no")
+        cur.update(v=v)
+
+    t = [0.0]
+    tuner = Tuner([Knob("x", "live", lambda: cur["v"], apply, lambda: "new")], lambda: None, tmp_path, "fp",
+                  clock=lambda: t[0])
+    tuner.idle()
+    for _ in range(Tuner.WINDOW + 1):
+        t[0] += 1; tuner.on_token()
+    assert cur["v"] == "old" and "x" in tuner.disabled and tuner.trial is None
+
+
+def _replay_snap():
+    rows = np.array([[0, 1]] * 300 + [[2, 3], [4, 5]] * 150, np.uint8)
+    return dict(rows={1: rows}, slots={1: 4}, policy="lfu", half_life=float("inf"), num_experts=8, grid=[2, 4, 8])
+
+
+def test_replay_candidate_applied_when_simulation_is_lower(tmp_path):
+    cur = {"v": "lfu"}
+    knob = Knob("policy", "replay", lambda: cur["v"], lambda v: cur.update(v=v))
+    tuner = Tuner([knob], _replay_snap, tmp_path, "fp", pool=Now())
+    tuner.idle(); tuner.idle()
+    assert cur["v"] in ("lru", "fifo") and tuner.trial is None
+
+
+def test_replay_worker_error_ends_trial_without_raising(tmp_path):
+    cur = {"v": "lfu"}
+    knob = Knob("policy", "replay", lambda: cur["v"], lambda v: cur.update(v=v))
+    tuner = Tuner([knob], lambda: {"rows": None}, tmp_path, "fp", pool=Now())
+    tuner.idle(); tuner.idle()
+    assert cur["v"] == "lfu" and tuner.trial is None
+
+
+class FakeGuard:
+    def __init__(self, ok):
+        self.ready = self.math_ok = True
+        self.ok, self.started = ok, 0
+
+    def start(self):
+        self.started += 1
+
+    def step(self):
+        return {"ok": self.ok, "kl_mean": 0.0}
+
+
+@pytest.mark.parametrize("ok", [True, False])
+def test_math_changing_candidate_is_kept_only_if_the_guard_passes(tmp_path, ok):
+    cur = {"v": "lfu"}
+    knob = Knob("policy", "replay", lambda: cur["v"], lambda v: cur.update(v=v), changes_math=True)
+    g = FakeGuard(ok)
+    tuner = Tuner([knob], _replay_snap, tmp_path, "fp", pool=Now(), guard=g)
+    tuner.idle(); tuner.idle()
+    assert tuner.trial["phase"] == "guard" and cur["v"] != "lfu" and g.started == 1
+    tuner.idle()
+    assert (cur["v"] != "lfu") is ok and tuner.trial is None
+
+
+def test_math_changing_knob_off_when_guard_is_not_quiet(tmp_path):
+    knob = Knob("policy", "replay", lambda: "lfu", lambda v: None, changes_math=True)
+    g = FakeGuard(True)
+    g.math_ok = False
+    tuner = Tuner([knob], _replay_snap, tmp_path, "fp", pool=Now(), guard=g)
+    tuner.idle()
+    assert tuner.trial is None
+
+
+def test_state_round_trip(tmp_path):
+    cur = {"v": "a"}
+    Tuner([_live(cur)], lambda: None, tmp_path, "fp").save()
+    cur["v"] = "b"
+    Tuner([_live(cur)], lambda: None, tmp_path, "fp").load_state()
+    assert cur["v"] == "a"
+
+
+def test_state_fingerprint_mismatch_is_ignored(tmp_path):
+    cur = {"v": "a"}
+    Tuner([_live(cur)], lambda: None, tmp_path, "fp").save()
+    cur["v"] = "b"
+    with pytest.warns(UserWarning, match="different pack or config"):
+        Tuner([_live(cur)], lambda: None, tmp_path, "other").load_state()
+    assert cur["v"] == "b"
+
+
+def test_saved_value_that_no_longer_applies_is_dropped(tmp_path):
+    (tmp_path / "state.json").write_text(json.dumps({"fingerprint": "fp", "values": {"x": "huge"}}))
+
+    def apply(v):
+        raise ValueError("over the cap")
+
+    with pytest.warns(UserWarning, match="saved x dropped"):
+        Tuner([Knob("x", "live", lambda: "a", apply, lambda: None)], lambda: None, tmp_path, "fp").load_state()
+
+
+def test_stats_windows_are_logged(tmp_path):
+    t, hm = [0.0], [0, 0]
+    tuner = Tuner([], lambda: None, tmp_path, "fp", clock=lambda: t[0], counts=lambda: tuple(hm))
+    tuner.on_token()
+    for _ in range(Tuner.STATS):
+        t[0] += 0.1; hm[0] += 3; hm[1] += 1
+        tuner.on_token()
+    rec = json.loads((tmp_path / "log.jsonl").read_text().splitlines()[-1])
+    assert rec["tok_s"] == pytest.approx(10.0) and rec["hit_rate"] == 0.75
