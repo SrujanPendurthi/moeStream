@@ -1,4 +1,7 @@
-from moestream.budget import GB, KV_BYTES_PER_TOKEN, allocate, parse_vm_stat, slot_budget_bytes, uniform
+import pytest
+
+from moestream.budget import (GB, KV_BYTES_PER_TOKEN, allocate, cap_budget_bytes, kv_bytes_per_token,
+                              parse_vm_stat, slot_budget_bytes, uniform)
 
 VM_STAT = """Mach Virtual Memory Statistics: (page size of 16384 bytes)
 Pages free:                                   100.
@@ -45,3 +48,28 @@ def test_allocate_never_exceeds_total_above_floor():
     curves = {l: [1 / (1 + i * l) for i in range(5)] for l in range(1, 40)}
     for total in (16 * 39, 5000, 7000):
         assert sum(allocate(curves, grid, total).values()) <= total
+
+
+def test_kv_bytes_per_token_by_bits():
+    assert kv_bytes_per_token(0) == 40960
+    assert kv_bytes_per_token(8) == 40960 * 136 // 256
+    assert kv_bytes_per_token(4) == 40960 * 72 // 256
+
+
+def test_cap_budget_subtracts_resident_kv_and_activations():
+    assert cap_budget_bytes(20 * GB, 1 * GB, 1000) == 20 * GB - 1 * GB - 40960 * 1000 - 1 * GB
+
+
+def test_fewer_kv_bits_leave_more_for_slots():
+    b = [cap_budget_bytes(20 * GB, 1 * GB, 32768, kv_bits=k) for k in (0, 8, 4)]
+    assert b[0] < b[1] < b[2]
+
+
+def test_cap_below_fixed_costs_raises_listing_each_term():
+    with pytest.raises(ValueError, match="resident.*KV.*activations"):
+        cap_budget_bytes(2 * GB, 1 * GB, 32768)
+
+
+def test_probe_budget_counts_kv_bits():
+    assert slot_budget_bytes(30 * GB, 20 * GB, 1 * GB, target_ctx=1000, kv_bits=8) == \
+        20 * GB - (1 * GB + kv_bytes_per_token(8) * 1000 + 1 * GB)

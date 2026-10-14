@@ -5,6 +5,11 @@ import subprocess
 
 GB = 1e9
 KV_BYTES_PER_TOKEN = 40 * 1024  # 10 full-attention layers, bf16 K+V (lagunaLab harness spec)
+KV_STORED = {0: 256, 8: 136, 4: 72}  # stored bytes per 128-dim vector (lagunaLab KV compression spec)
+
+
+def kv_bytes_per_token(bits=0):
+    return KV_BYTES_PER_TOKEN * KV_STORED[bits] // 256
 
 
 def parse_vm_stat(text):
@@ -13,16 +18,32 @@ def parse_vm_stat(text):
     return page * sum(pages.get(k, 0) for k in ("free", "inactive", "speculative", "purgeable"))
 
 
-def slot_budget_bytes(available, working_set, resident, target_ctx=32768, headroom=3 * GB, activations=1 * GB):
-    other = resident + KV_BYTES_PER_TOKEN * target_ctx + activations
+def slot_budget_bytes(available, working_set, resident, target_ctx=32768, headroom=3 * GB, activations=1 * GB,
+                      kv_bits=0):
+    other = resident + kv_bytes_per_token(kv_bits) * target_ctx + activations
     return int(max(0, min(available - headroom, working_set) - other))
+
+
+def cap_budget_bytes(cap, resident, target_ctx=32768, kv_bits=0, activations=1 * GB):
+    """Slot bytes left under an explicit total cap; raises if the fixed costs alone exceed it."""
+    kv = kv_bytes_per_token(kv_bits) * target_ctx
+    left = cap - resident - kv - activations
+    if left <= 0:
+        raise ValueError(f"memory cap {cap / GB:.2f} GB is below the fixed costs: resident {resident / GB:.2f} GB "
+                         f"+ KV {kv / GB:.2f} GB ({target_ctx} tokens, kv_bits {kv_bits}) "
+                         f"+ activations {activations / GB:.2f} GB")
+    return int(left)
+
+
+def free_bytes():
+    vm = subprocess.run(["vm_stat"], capture_output=True, text=True, check=True).stdout
+    return parse_vm_stat(vm)
 
 
 def probe(resident, **kw):
     import mlx.core as mx
 
-    vm = subprocess.run(["vm_stat"], capture_output=True, text=True, check=True).stdout
-    return slot_budget_bytes(parse_vm_stat(vm), mx.device_info()["max_recommended_working_set_size"], resident, **kw)
+    return slot_budget_bytes(free_bytes(), mx.device_info()["max_recommended_working_set_size"], resident, **kw)
 
 
 def uniform(layers, total, floor=16, num_experts=256):

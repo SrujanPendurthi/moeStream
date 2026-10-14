@@ -8,7 +8,7 @@ import mlx.core as mx
 import mlx.nn as nn
 
 from laguna_mlx import laguna
-from moestream.budget import GB, allocate, probe, uniform
+from moestream.budget import GB, allocate, cap_budget_bytes, free_bytes, probe, uniform
 from moestream.layer import StreamingMoE
 
 
@@ -23,7 +23,8 @@ def _per_layer_slots(layers, E, stride, budget, cal, floor):
     return uniform(layers, total, min(floor, E), E)
 
 
-def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=None, target_ctx=32768, eviction="lfu", floor=16):
+def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=None, half_life=None,
+         target_ctx=32768, kv_bits=0, eviction="lfu", floor=16):
     pack_dir = Path(pack_dir)
     config = json.loads((pack_dir / "config.json").read_text())
     layout = json.loads((pack_dir / "layout.json").read_text())
@@ -47,8 +48,17 @@ def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=No
     if slots is not None:
         per = {l: slots for l in layers}
     else:
-        budget = budget_gb * GB if budget_gb is not None else probe(
-            (pack_dir / "resident.safetensors").stat().st_size, target_ctx=target_ctx)
+        resident = (pack_dir / "resident.safetensors").stat().st_size
+        if budget_gb is not None:
+            budget = budget_gb * GB
+        elif memory_gb is not None:
+            budget = cap_budget_bytes(memory_gb * GB, resident, target_ctx, kv_bits)
+            free = free_bytes()
+            if free < memory_gb * GB:
+                warnings.warn(f"memory_gb {memory_gb:g} GB but only {free / GB:.1f} GB is free; slot writes slow "
+                              "about 17x once macOS pages (known good: 12.8 GB peak, 13.9 tok/s at 128 slots)")
+        else:
+            budget = probe(resident, target_ctx=target_ctx, kv_bits=kv_bits)
         per = _per_layer_slots(layers, E, stride, budget, cal, floor)
 
     args = laguna.ModelArgs.from_dict(config)

@@ -178,3 +178,18 @@ def test_non_lfu_policy_with_calibration_warns(packed, tmp_path):
     with pytest.warns(UserWarning, match="tuned for lfu"):
         m, _ = load(out, budget_gb=1.0, calibration=cal, eviction="lru")
     assert {moe.io.store.policy for moe in _moe(m)} == {"lru"}
+
+
+def test_memory_gb_below_fixed_costs_raises(packed):
+    out, _ = packed
+    with pytest.raises(ValueError, match="resident"):
+        load(out, memory_gb=1e-6)
+
+
+def test_memory_gb_over_free_memory_warns_with_known_good_point(packed, monkeypatch):
+    out, resident = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 0)
+    with pytest.warns(UserWarning, match="free.*12.8 GB"):
+        m, _ = load(out, memory_gb=50.0)
+    ids = _ids(12)
+    _close(m(ids), resident(ids))
