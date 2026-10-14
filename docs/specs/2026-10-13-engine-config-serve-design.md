@@ -6,8 +6,8 @@ Status: draft for review
 ## Goal
 
 Laguna-XS-2.1 on moeStream, usable inside the pi harness, with every engine setting in one
-file: how much memory the engine may use, context size, KV cache quantization and the expert
-eviction policy. Whatever memory is left after the fixed costs is filled with the experts in use.
+file: how much memory the engine may use, context size, KV cache quantization, the expert
+eviction policy and whether the model thinks before answering. Whatever memory is left after the fixed costs is filled with the experts in use.
 
 Done means: a multi-turn pi session with tool calls completes against the moeStream server, and
 changing a setting in the file changes what the engine does.
@@ -36,6 +36,7 @@ kv_bits = 0               # 0 = bf16 (lossless), 8 or 4 = quantized
 eviction = "lfu"          # lfu | lru | fifo
 half_life = 64            # lfu only; omit to take it from the calibration file
 calibration = "budget.json"
+thinking = true           # Laguna's built-in <think> reasoning; the model's own default is on
 port = 8081
 ```
 
@@ -101,6 +102,13 @@ It is mlx-lm's OpenAI-compatible server with the loader swapped, the same shape 
   and `--prompt-cache-bytes` equal to the KV reservation, so stored conversation caches stay
   inside the memory the budget set aside for KV.
 
+- `--chat-template-args '{"enable_thinking": <thinking>}'`. Laguna's chat template already
+  implements reasoning (`<think>` blocks, `reasoning_content` carried across turns) and mlx-lm's
+  server already separates it from the answer; nothing new is built. A request that sends its own
+  `chat_template_kwargs` still overrides the default.
+- Sampling from the pack's `generation_config.json` (`--temp 1.0 --top-k 20 --top-p 1.0`), which
+  are the settings the model ships with for thinking. Phase 1's benchmarks stay greedy.
+
 `context_tokens` is not enforced by the server in this version. pi is told the same number as its
 context window and compacts before reaching it. A client that ignores it can exceed the cap.
 
@@ -114,11 +122,12 @@ One provider added to `~/.pi/agent/models.json`, next to the existing `llamacpp`
   "api": "openai-completions",
   "apiKey": "none",
   "compat": { "supportsDeveloperRole": false },
-  "models": [{ "id": "Laguna-XS-2.1", "contextWindow": 32768, "maxTokens": 4096 }]
+  "models": [{ "id": "Laguna-XS-2.1", "reasoning": true, "contextWindow": 32768, "maxTokens": 4096 }]
 }
 ```
 
-`contextWindow` must match `context_tokens`. The file is outside the repo: the edit is shown for
+`contextWindow` must match `context_tokens`, and `reasoning` must match `thinking` so pi keeps the
+model's reasoning between turns. The file is outside the repo: the edit is shown for
 confirmation before it is made, and the README gains the snippet.
 
 ## Errors
@@ -132,7 +141,7 @@ confirmation before it is made, and the README gains the snippet.
 
 In the existing style, on the tiny model, no real weights:
 
-- `test_config.py`: a file reads into the expected object; unknown key, bad `kv_bits` and bad `eviction` each raise.
+- `test_config.py`: a file reads into the expected object; `thinking` defaults to true; unknown key, bad `kv_bits` and bad `eviction` each raise.
 - `test_store.py`: for one access sequence, `lfu`, `lru` and `fifo` each evict the expert the
   table above says.
 - `test_budget.py`: `kv_bytes_per_token` at 0, 8 and 4 bits; lower `kv_bits` gives more slot
@@ -151,3 +160,6 @@ One heavy job at a time; check nothing else is running first.
    corrected from the measurement.
 4. Repeat step 2's first turns with `eviction = "lru"`, then `kv_bits = 8`; the load banner and
    the stats change accordingly. Report tok/s for each.
+5. Repeat with `thinking = false`: the response carries no reasoning. Report output tokens and
+   wall time per turn for both. Whether thinking improves task results is the parity eval's
+   question (sub-project 2), not this one's.
