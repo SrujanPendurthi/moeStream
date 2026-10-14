@@ -32,8 +32,8 @@ is added with the UI, which is the first thing that needs it.
 ```toml
 pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
 memory_gb = 20.0          # peak GPU memory the engine may use; omit to probe free memory
-context_tokens = 32768    # longest session the KV reservation is sized for
-kv_bits = 0               # 0 = bf16 (lossless), 8 or 4 = quantized
+context_tokens = 131072   # longest session the KV reservation is sized for
+kv_bits = 8               # 8 = q8 (default), 4 = q4, 0 = bf16 (lossless)
 eviction = "lfu"          # lfu | lru | fifo
 half_life = 64            # lfu only; omit to take it from the calibration file
 calibration = "budget.json"
@@ -75,6 +75,10 @@ The split of those slots across layers is unchanged: `allocate` from the calibra
 `uniform` without one.
 
 ## KV quantization
+
+**Default: q8 KV at 128k context** (your decision, 2026-10-13). One session is 2.85 GB of KV;
+with the two-session served reservation that leaves about 12.1 GB of expert slots at the 20 GB
+cap. bf16 and q4 stay selectable. Mixed-precision KV by token age (q5-q8) is deferred to the end.
 
 `load` replaces the model's cache factory when `kv_bits` is 8 or 4, using lagunaLab's
 `laguna_mlx.cache.make_quantized_cache`: K/V stored at `kv_bits` on the 10 full-attention layers
@@ -144,7 +148,7 @@ One provider added to `~/.pi/agent/models.json`, next to the existing `llamacpp`
   "api": "openai-completions",
   "apiKey": "none",
   "compat": { "supportsDeveloperRole": false },
-  "models": [{ "id": "Laguna-XS-2.1", "reasoning": true, "contextWindow": 32768, "maxTokens": 4096 }]
+  "models": [{ "id": "Laguna-XS-2.1", "reasoning": true, "contextWindow": 131072, "maxTokens": 4096 }]
 }
 ```
 

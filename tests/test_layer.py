@@ -227,7 +227,7 @@ def test_load_from_config_file(packed, tmp_path, monkeypatch):
     out, resident = packed
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)  # independent of what else is running
     f = tmp_path / "engine.toml"
-    f.write_text(f'pack_dir = "{out}"\nmemory_gb = 50.0\neviction = "fifo"\n')
+    f.write_text(f'pack_dir = "{out}"\nmemory_gb = 50.0\neviction = "fifo"\nkv_bits = 0\n')  # tiny head_dim 16 cannot quantize
     m, _ = load(EngineConfig.read(f))
     assert {moe.io.store.policy for moe in _moe(m)} == {"fifo"}
     ids = _ids(12)
@@ -239,4 +239,4 @@ def test_config_load_reserves_kv_for_the_live_and_one_stored_session(packed, tmp
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
     # 3 GB covers resident + 1 GB activations + one 32k-token bf16 KV (1.34 GB), not two
     with pytest.raises(ValueError, match="KV"):
-        load(EngineConfig(pack_dir=str(out), memory_gb=3.0))
+        load(EngineConfig(pack_dir=str(out), memory_gb=3.0, kv_bits=0, context_tokens=32768))

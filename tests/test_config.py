@@ -15,7 +15,7 @@ def _write(tmp_path, text, name="engine.toml"):
 
 def test_shipped_file_reads_with_spec_defaults():
     c = EngineConfig.read(REPO / "moestream.toml")
-    assert c.memory_gb == 20.0 and c.context_tokens == 32768 and c.kv_bits == 0
+    assert c.memory_gb == 20.0 and c.context_tokens == 131072 and c.kv_bits == 8
     assert c.eviction == "lfu" and c.thinking is True and c.port == 8081
     assert Path(c.pack_dir) == (REPO / "../lagunaLab/models/Laguna-XS-2.1-packed")
     assert Path(c.calibration) == REPO / "budget.json"
@@ -24,7 +24,7 @@ def test_shipped_file_reads_with_spec_defaults():
 def test_omitted_keys_take_defaults(tmp_path):
     c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
     assert c.memory_gb is None and c.half_life is None and c.calibration is None
-    assert c.thinking is True and c.eviction == "lfu" and c.kv_bits == 0
+    assert c.thinking is True and c.eviction == "lfu" and c.kv_bits == 8 and c.context_tokens == 131072
 
 
 def test_relative_paths_resolve_against_the_file_not_the_cwd(tmp_path, monkeypatch):

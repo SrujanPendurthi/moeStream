@@ -11,7 +11,7 @@ def _flag(argv, name):
 def test_argv_from_defaults():
     a = server_argv(EngineConfig(pack_dir="/p", port=9000))
     assert _flag(a, "--model") == "/p" and _flag(a, "--port") == "9000"
-    assert _flag(a, "--prompt-cache-bytes") == str(40960 * 32768)
+    assert _flag(a, "--prompt-cache-bytes") == str(40960 * 136 // 256 * 131072)  # q8, 128k
     assert json.loads(_flag(a, "--chat-template-args")) == {"enable_thinking": True}
     assert (_flag(a, "--temp"), _flag(a, "--top-k"), _flag(a, "--top-p")) == ("1.0", "20", "1.0")
     assert _flag(a, "--max-tokens") == "4096" and _flag(a, "--prompt-cache-size") == "6"

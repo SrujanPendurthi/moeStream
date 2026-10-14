@@ -23,8 +23,8 @@ def _num(v):
 class EngineConfig:
     pack_dir: str
     memory_gb: float | None = None
-    context_tokens: int = 32768
-    kv_bits: int = 0
+    context_tokens: int = 131072
+    kv_bits: int = 8
     eviction: str = "lfu"
     half_life: float | None = None
     calibration: str | None = None
