@@ -7,10 +7,21 @@ import argparse
 import glob
 import json
 import time
+import urllib.error
 import urllib.request
 
 
+def _wire(m):
+    """OpenAI wire format: tool-call arguments are a JSON string; captured sessions hold dicts."""
+    if not m.get("tool_calls"):
+        return m
+    calls = [{**c, "function": {**c["function"], "arguments": json.dumps(c["function"]["arguments"])}}
+             if not isinstance(c["function"]["arguments"], str) else c for c in m["tool_calls"]]
+    return {**m, "tool_calls": calls}
+
+
 def turns(msgs):
+    msgs = [_wire(m) for m in msgs]
     return [msgs[:i] for i, m in enumerate(msgs) if m["role"] == "assistant" and i]
 
 
@@ -32,7 +43,10 @@ def main():
                 body = {"model": "Laguna-XS-2.1", "messages": prefix, "max_tokens": 256, "tools": tools}
                 req = urllib.request.Request(f"{a.url}/chat/completions", json.dumps(body).encode(),
                                              {"Content-Type": "application/json"})
-                urllib.request.urlopen(req, timeout=600).read()
+                try:
+                    urllib.request.urlopen(req, timeout=600).read()
+                except urllib.error.HTTPError as e:  # one failed turn is logged, the drive goes on
+                    print(f"{f} turn {len(prefix)}: HTTP {e.code} {e.read()[:500]!r}", flush=True)
             print(f, flush=True)
 
 
