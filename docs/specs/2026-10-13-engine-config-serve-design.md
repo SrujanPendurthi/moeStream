@@ -1,0 +1,153 @@
+# moeStream engine: config, eviction policies, server, pi (sub-project 1)
+
+Date: 2026-10-13
+Status: draft for review
+
+## Goal
+
+Laguna-XS-2.1 on moeStream, usable inside the pi harness, with every engine setting in one
+file: how much memory the engine may use, context size, KV cache quantization and the expert
+eviction policy. Whatever memory is left after the fixed costs is filled with the experts in use.
+
+Done means: a multi-turn pi session with tool calls completes against the moeStream server, and
+changing a setting in the file changes what the engine does.
+
+This is sub-project 1 of the roadmap (speed gate, **engine**, parity eval, control UI,
+self-tuning, refine loop). It assumes sub-project 0 has brought decode speed to at least
+lagunaLab's; if the fix there changes how slots are stored, only `layer.py` internals move, not
+anything below.
+
+## Not in scope
+
+The web UI and terminal UI (sub-project 3; they will read and write the same file), self-tuning,
+the refine loop, the parity eval, any change to weights, and any write to `lagunaLab/`.
+
+## Config: one file, one object
+
+New `moestream/config.py` with an `EngineConfig` dataclass and `EngineConfig.read(path)`. The
+file is `moestream.toml` at the repo root, read with stdlib `tomllib`. Writing the file from code
+is added with the UI, which is the first thing that needs it.
+
+```toml
+pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
+memory_gb = 16.0          # peak GPU memory the engine may use; omit to probe free memory
+context_tokens = 32768    # longest session the KV reservation is sized for
+kv_bits = 0               # 0 = bf16 (lossless), 8 or 4 = quantized
+eviction = "lfu"          # lfu | lru | fifo
+half_life = 64            # lfu only; omit to take it from the calibration file
+calibration = "budget.json"
+port = 8081
+```
+
+`read` rejects unknown keys, `kv_bits` outside {0, 4, 8} and `eviction` outside the three names,
+with the bad value in the message. `load()` in `moestream/load.py` gains `load(config)`; its
+current keyword form stays for the tools and tests that use it.
+
+## Memory: fill the cap with experts
+
+`slot_budget_bytes` in `moestream/budget.py` already gives the slots whatever is left after the
+fixed costs. Two changes:
+
+- **The cap comes from the config.** With `memory_gb` set, slot bytes =
+  `memory_gb - resident - kv_bytes(context_tokens, kv_bits) - activations (1 GB)`. With it
+  omitted, the existing `vm_stat` probe is the cap. If `memory_gb` is more than the probe says is
+  free, load warns and continues. If the fixed costs alone exceed `memory_gb`, load raises with
+  each term in the message.
+- **KV bytes depend on `kv_bits`.** New `kv_bytes_per_token(bits)`: 40,960 at bf16, times 136/256
+  at 8-bit, times 72/256 at 4-bit (stored sizes from lagunaLab's KV compression spec).
+
+The split of those slots across layers is unchanged: `allocate` from the calibration file, or
+`uniform` without one.
+
+## KV quantization
+
+`load` replaces the model's cache factory when `kv_bits` is 8 or 4: mlx-lm's
+`QuantizedKVCache(bits=kv_bits)` on the 10 full-attention layers, `RotatingKVCache` unchanged on
+the sliding ones (their window is fixed at about 60 MB). No new quantizer. `kv_bits = 0` leaves
+`laguna.Model.make_cache` as it is.
+
+Not known yet: decode speed with `QuantizedKVCache` at long context, and its quality cost on
+Laguna. lagunaLab's Part 3 plan measures quality; this spec measures speed in its verification
+and reports both settings, it does not promise either is free.
+
+## Eviction policies
+
+`SlotStore` (`moestream/store.py`) takes `policy`. `_victims` already sorts candidate slots by a
+key; the policy picks the key.
+
+| policy | evicts | key |
+|---|---|---|
+| `lfu` | lowest decayed use count, oldest use breaks ties (today's behaviour) | `(score, last)` |
+| `lru` | least recently used | `last` |
+| `fifo` | longest resident | `loaded`, a new per-expert array set to the clock when an expert is filled |
+
+LIFO is left out. It evicts the most recently loaded expert, which is the one routing just asked
+for, so every token would reload its own experts.
+
+Offline calibration (`tools/calibrate.py`) simulates LFU only. With `lru` or `fifo` the per-layer
+split from `budget.json` is still used but was tuned for LFU; the load banner says so.
+
+## Server
+
+New `tools/serve.py`, run as `PYTHONPATH=.:../lagunaLab python3 -m tools.serve [--config moestream.toml]`.
+It is mlx-lm's OpenAI-compatible server with the loader swapped, the same shape as
+`lagunaLab/scripts/serve_streaming.py`:
+
+- Importing `scripts.serve_streaming` installs lagunaLab's keepalive filter on the handler; that
+  is reused by import.
+- The loader calls `moestream.load.load(config)` and adds the extra EOS ids from
+  `generation_config.json` (id 24, `</assistant>`), as lagunaLab's loader does.
+- Defaults passed to mlx-lm: `--port` from config, `--max-tokens 4096`, `--prompt-cache-size 6`,
+  and `--prompt-cache-bytes` equal to the KV reservation, so stored conversation caches stay
+  inside the memory the budget set aside for KV.
+
+`context_tokens` is not enforced by the server in this version. pi is told the same number as its
+context window and compacts before reaching it. A client that ignores it can exceed the cap.
+
+## pi
+
+One provider added to `~/.pi/agent/models.json`, next to the existing `llamacpp` entry:
+
+```json
+"moestream": {
+  "baseUrl": "http://127.0.0.1:8081/v1",
+  "api": "openai-completions",
+  "apiKey": "none",
+  "compat": { "supportsDeveloperRole": false },
+  "models": [{ "id": "Laguna-XS-2.1", "contextWindow": 32768, "maxTokens": 4096 }]
+}
+```
+
+`contextWindow` must match `context_tokens`. The file is outside the repo: the edit is shown for
+confirmation before it is made, and the README gains the snippet.
+
+## Errors
+
+- Bad config value: raise at read, naming the key and value.
+- Fixed costs over the cap: raise at load, listing resident, KV, activations and the cap in GB.
+- Slot budget under the 16-slot floor: the existing warning stays.
+- A failed expert read already retries once and then raises (`moestream/prefetch.py`); unchanged.
+
+## Tests
+
+In the existing style, on the tiny model, no real weights:
+
+- `test_config.py`: a file reads into the expected object; unknown key, bad `kv_bits` and bad `eviction` each raise.
+- `test_store.py`: for one access sequence, `lfu`, `lru` and `fifo` each evict the expert the
+  table above says.
+- `test_budget.py`: `kv_bytes_per_token` at 0, 8 and 4 bits; lower `kv_bits` gives more slot
+  bytes; fixed costs over the cap raise.
+- `test_layer.py` or `test_bench.py`: tiny model loaded from an `EngineConfig` with `kv_bits = 8`
+  generates, and its cache list holds `QuantizedKVCache` on full-attention layers only.
+
+## Verification on real weights
+
+One heavy job at a time; check nothing else is running first.
+
+1. Start the server, `curl` one chat completion.
+2. Run a multi-turn pi session with tool calls on a small repo. Record from the server log:
+   cached tokens growing turn over turn, decode tok/s, hit rate, peak GPU.
+3. Peak GPU is at or under `memory_gb`. If it is over, the 1 GB activations term is wrong and is
+   corrected from the measurement.
+4. Repeat step 2's first turns with `eviction = "lru"`, then `kv_bits = 8`; the load banner and
+   the stats change accordingly. Report tok/s for each.
