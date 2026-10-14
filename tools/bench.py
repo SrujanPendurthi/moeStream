@@ -1,6 +1,6 @@
 """Decode speed, hit rate, prediction accuracy and time split: lagunaLab streaming vs moeStream.
 
-PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base]
+PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base] [--no-prefetch]
 Loads real weights one model at a time: message the other sessions and wait for a go-ahead first.
 """
 import argparse
@@ -74,6 +74,7 @@ def main():
     p.add_argument("--slots", type=int, default=None, help="diagnostic: same slot count on every layer")
     p.add_argument("--eval-writes", action="store_true", help="diagnostic: time slot writes in write_s")
     p.add_argument("--no-base", action="store_true", help="diagnostic: skip the lagunaLab baseline run")
+    p.add_argument("--no-prefetch", action="store_true", help="diagnostic: no lookahead prediction or prefetch")
     a = p.parse_args()
     import moestream.layer
     moestream.layer.EVAL_WRITES = a.eval_writes
@@ -110,13 +111,20 @@ def main():
     base = None
     if not a.no_base:
         base, base_outs = run("lagunaLab slots=32", lambda: load_streaming(a.pack, 32), lab_stats)
-    mine, my_outs = run("moeStream", lambda: load(a.pack, slots=a.slots, budget_gb=a.budget_gb, calibration=a.calibration),
-                        stream_stats)
+    def load_mine():
+        model, tok = load(a.pack, slots=a.slots, budget_gb=a.budget_gb, calibration=a.calibration)
+        if a.no_prefetch:
+            for l in model.layers:
+                if hasattr(l.mlp, "io"):
+                    l.mlp.io.next = None
+        return model, tok
+
+    mine, my_outs = run("moeStream", load_mine, stream_stats)
     if base:
         mine["identical_to_lagunaLab"] = my_outs == base_outs
         mine["speedup_vs_lagunaLab"] = mine["decode_tok_s"] / base["decode_tok_s"]
     mine["ctx_decode_ratio"] = mine["decode_ctx_tok_s"] / mine["decode_tok_s"]
-    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "")
+    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "") + ("_noprefetch" if a.no_prefetch else "")
     out = Path("results") / f"bench{tag}.json"
     out.write_text(json.dumps({"rows": [r for r in (base, mine) if r], "cold": a.cold}, indent=1))
 
