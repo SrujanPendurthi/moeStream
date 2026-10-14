@@ -30,6 +30,9 @@ class EngineConfig:
     calibration: str | None = None
     thinking: bool = True
     port: int = 8081
+    tune: bool = True
+    tuning_dir: str = "tuning"
+    trace_tokens: int = 65536
 
     @classmethod
     def read(cls, path):
@@ -42,7 +45,7 @@ class EngineConfig:
             raise ValueError(f"{path}: pack_dir is required")
         c = cls(**raw)
         c._check()
-        for key in ("pack_dir", "calibration"):
+        for key in ("pack_dir", "calibration", "tuning_dir"):
             v = getattr(c, key)
             if v is not None and not Path(v).is_absolute():
                 setattr(c, key, str(path.parent / v))
@@ -59,6 +62,9 @@ class EngineConfig:
             "calibration": self.calibration is None or isinstance(self.calibration, str),
             "thinking": isinstance(self.thinking, bool),
             "port": _int(self.port) and 0 < self.port < 65536,
+            "tune": isinstance(self.tune, bool),
+            "tuning_dir": isinstance(self.tuning_dir, str),
+            "trace_tokens": _int(self.trace_tokens) and self.trace_tokens > 0,
         }
         for key, ok in rules.items():
             if not ok:

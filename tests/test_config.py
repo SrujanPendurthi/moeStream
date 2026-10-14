@@ -57,3 +57,17 @@ def test_absolute_paths_are_kept(tmp_path):
 def test_bad_values_raise_naming_the_key(tmp_path, line, key):
     with pytest.raises(ValueError, match=key):
         EngineConfig.read(_write(tmp_path, f'pack_dir = "p"\n{line}\n'))
+
+
+def test_tuning_keys_default_and_resolve(tmp_path):
+    c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
+    assert c.tune is True and c.trace_tokens == 65536
+    assert Path(c.tuning_dir) == tmp_path / "tuning"
+    shipped = EngineConfig.read(REPO / "moestream.toml")
+    assert shipped.tune is True and Path(shipped.tuning_dir) == REPO / "tuning"
+
+
+@pytest.mark.parametrize("line", ["tune = 1", "trace_tokens = 0", "tuning_dir = 3"])
+def test_bad_tuning_values_raise(tmp_path, line):
+    with pytest.raises(ValueError, match=line.split(" ")[0]):
+        EngineConfig.read(_write(tmp_path, f'pack_dir = "p"\n{line}\n'))

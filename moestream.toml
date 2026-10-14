@@ -8,3 +8,6 @@ eviction = "lfu"          # lfu | lru | fifo
 calibration = "budget.json"
 thinking = true           # Laguna's built-in <think> reasoning; the model's own default is on
 port = 8081
+tune = true               # false = serve with the saved tuning state, never trial
+tuning_dir = "tuning"     # tuning state, log and quality reference
+trace_tokens = 65536      # routing rows kept per layer for replay
