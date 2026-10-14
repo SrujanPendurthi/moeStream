@@ -34,8 +34,9 @@ def main():
     p.add_argument("--traces", default="../lagunaLab/traces")
     p.add_argument("--url", default="http://127.0.0.1:8081/v1")
     p.add_argument("--minutes", type=float, default=60)
-    p.add_argument("--max-chars", type=int, default=32000, help="skip turns whose prefix is longer (about 8k tokens)")
+    p.add_argument("--max-chars", type=int, default=16000, help="skip turns whose prefix is longer (about 4k tokens)")
     p.add_argument("--max-tokens", type=int, default=1024)
+    p.add_argument("--pause", type=float, default=5, help="idle seconds between turns (tool time); the tuner works only when idle")
     a = p.parse_args()
     end = time.time() + 60 * a.minutes
     while time.time() < end:
@@ -51,6 +52,7 @@ def main():
                     urllib.request.urlopen(req, timeout=600).read()
                 except urllib.error.HTTPError as e:  # one failed turn is logged, the drive goes on
                     print(f"{f} turn {len(prefix)}: HTTP {e.code} {e.read()[:500]!r}", flush=True)
+                time.sleep(a.pause)
             print(f, flush=True)
 
 

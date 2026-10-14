@@ -17,3 +17,4 @@ def test_tool_call_arguments_are_sent_as_json_strings():
 def test_turns_longer_than_max_chars_are_skipped():
     msgs = [{"role": "user", "content": "x"}, {"role": "assistant"}, {"role": "user", "content": "y" * 1000}, {"role": "assistant"}]
     assert [len(t) for t in turns(msgs, max_chars=500)] == [1]
+
