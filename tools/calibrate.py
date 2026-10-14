@@ -17,8 +17,8 @@ GRID = [16, 32, 48, 64, 96, 128, 192, 256]
 HALF_LIVES = [64.0, 128.0, 256.0, 512.0, 1024.0, float("inf")]
 
 
-def miss_rate(seq, slots, half_life, num_experts=256):
-    s = SlotStore(num_experts, slots, half_life)
+def miss_rate(seq, slots, half_life, num_experts=256, policy="lfu"):
+    s = SlotStore(num_experts, slots, half_life, policy)
     for row in seq:
         s.tick()
         s.assign(row.tolist())
