@@ -1,3 +1,4 @@
+import pytest
 import json
 
 from moestream.config import EngineConfig
@@ -86,3 +87,46 @@ def test_idle_polls_drive_the_tuner(monkeypatch):
     assert rg._next_request(0.1) is None and idles == [1]
     rg.queued = "req"
     assert rg._next_request(0.1) == "req" and idles == [1]
+
+
+def test_tuner_error_in_idle_turns_tuning_off_instead_of_killing_the_thread(monkeypatch):
+    from types import SimpleNamespace
+
+    from mlx_lm.models.cache import LRUPromptCache
+
+    import tools.serve as serve
+
+    class RG:
+        def _next_request(self, timeout=None):
+            return None
+
+    serve.patch_server(SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None, ResponseGenerator=RG),
+                       EngineConfig(pack_dir="/p"))
+
+    def boom():
+        raise OSError("disk full")
+
+    tuners = [SimpleNamespace(idle=boom)]
+    monkeypatch.setattr(serve, "TUNER", tuners)
+    with pytest.warns(UserWarning, match="tuning off"):
+        assert RG()._next_request(0.1) is None
+    assert tuners == []
+
+
+def test_batched_poll_between_tokens_does_not_run_idle_work(monkeypatch):
+    from types import SimpleNamespace
+
+    from mlx_lm.models.cache import LRUPromptCache
+
+    import tools.serve as serve
+
+    class RG:
+        def _next_request(self, timeout=None):
+            return None
+
+    serve.patch_server(SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None, ResponseGenerator=RG),
+                       EngineConfig(pack_dir="/p"))
+    idles = []
+    monkeypatch.setattr(serve, "TUNER", [SimpleNamespace(idle=lambda: idles.append(1))])
+    RG()._next_request(None)  # mlx-lm's non-blocking poll while a batch is decoding
+    assert idles == []

@@ -59,3 +59,12 @@ def test_ab_keep_needs_seven_of_eight():
     assert ab_keep(faster[:7]) is None
     assert ab_keep(faster) is True
     assert ab_keep([(1.0, 0.9)] * 6 + [(1.0, 1.1)] * 2) is False
+
+
+def test_ring_is_one_preallocated_buffer():
+    r = Ring(5)
+    for i in range(40):
+        r.append(np.full((1, 2), i, np.uint8))
+    assert r.buf.shape == (10, 2) and r.rows()[:, 0].tolist() == [35, 36, 37, 38, 39]
+    r.append(np.arange(16, dtype=np.uint8).reshape(8, 2))  # a prefill chunk bigger than cap
+    assert r.rows()[:, 0].tolist() == [6, 8, 10, 12, 14]

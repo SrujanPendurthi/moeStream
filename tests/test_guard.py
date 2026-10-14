@@ -74,3 +74,13 @@ def test_guard_fails_a_changed_model_and_survives_errors(model, tmp_path):
     g.model = Broken()
     g.start()
     assert g.step() == {"ok": False, "error": "MemoryError('oom')"}
+
+
+def test_corrupt_reference_file_is_rebuilt_not_fatal(model, tmp_path):
+    f = tmp_path / "ref.npz"
+    f.write_bytes(b"half a file")
+    g = Guard(model, [[1, 2, 3, 4]], f, "k", total=16, chunk=8)
+    assert not g.ready
+    while not g.ready:
+        g.step()
+    assert g.math_ok and not list(tmp_path.glob("*.tmp*"))

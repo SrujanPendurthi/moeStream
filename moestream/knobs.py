@@ -1,4 +1,5 @@
 """The system-level knobs the tuner turns: eviction policy, half-life, slot split, lookahead prefetch, read threads."""
+import mlx.core as mx
 import numpy as np
 
 from moestream import prefetch
@@ -34,6 +35,7 @@ def system_knobs(model, max_slots, ready=lambda: True):
         for l in sorted(split, key=lambda l: split[l] - by[l].io.store.slots):  # shrink before growing
             if split[l] != by[l].io.store.slots:
                 by[l].resize(split[l])
+        mx.clear_cache()  # freed slot buffers go back to the OS; MLX's buffer cache would keep them
 
     def get_prefetch():
         return [l for l in pre if by[l].io.lookahead]

@@ -22,9 +22,15 @@ EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of t
 
 
 def _glu(args, slots, group_size, bits, dtype):
-    glu = SwitchGLU(args.hidden_size, args.moe_intermediate_size, slots)
+    # one-expert template: SwitchLinear's init draws a float32 random tensor per expert, which at
+    # Laguna's size is ~1.6 GB transient for 128 slots. Slot arrays start as zeros instead.
+    glu = SwitchGLU(args.hidden_size, args.moe_intermediate_size, 1)
     glu.set_dtype(dtype)  # match packed scales dtype: no cast on write
     nn.quantize(glu, group_size=group_size, bits=bits)
+    for proj in (glu.gate_proj, glu.up_proj, glu.down_proj):
+        for part in ("weight", "scales", "biases"):
+            a = getattr(proj, part)
+            setattr(proj, part, mx.zeros((slots, *a.shape[1:]), a.dtype))
     return glu
 
 

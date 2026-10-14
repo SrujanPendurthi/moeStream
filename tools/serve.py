@@ -74,8 +74,12 @@ def patch_server(server, cfg):
 
     def _next_request(self, timeout=None):
         r = nxt(self, timeout)
-        if r is None and TUNER:
-            TUNER[0].idle()
+        if r is None and timeout is not None and TUNER:  # timeout None: polled between batched decode steps
+            try:
+                TUNER[0].idle()
+            except Exception as e:  # raised here, it would end mlx-lm's generation thread and hang the server
+                TUNER.clear()
+                warnings.warn(f"tuning off: {e!r}")
         return r
 
     server.ResponseGenerator._next_request = _next_request

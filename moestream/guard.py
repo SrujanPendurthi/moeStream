@@ -3,6 +3,7 @@
 Work runs in bounded slices (one chunk of tokens per step) so it can share mlx-lm's generation
 thread with live requests.
 """
+import os
 from pathlib import Path
 
 import mlx.core as mx
@@ -47,11 +48,13 @@ class Guard:
         self.model, self.path, self.key, self.chunk, self.k, self.th = model, Path(path), key, chunk, k, th
         self.ready = self.math_ok = False
         self._run = None
-        if self.path.exists():
+        try:
             z = np.load(self.path)
             if str(z["key"]) == key:
                 self.seqs, self.ref = z["seqs"], (z["ids"], z["logp"])
                 self.math_ok, self.ready = bool(z["math_ok"]), True
+        except Exception:  # missing or unreadable: rebuild
+            pass
         if not self.ready:
             self._run = self._build(prompts, total)
 
@@ -95,7 +98,9 @@ class Guard:
         v = yield from self._compare()
         self.math_ok = quiet(v, self.th)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(self.path, key=self.key, seqs=self.seqs, ids=self.ref[0], logp=self.ref[1], math_ok=self.math_ok)
+        tmp = self.path.with_name(self.path.stem + ".tmp.npz")
+        np.savez(tmp, key=self.key, seqs=self.seqs, ids=self.ref[0], logp=self.ref[1], math_ok=self.math_ok)
+        os.replace(tmp, self.path)  # a crash mid-write never leaves a reference that fails to load
         self.ready = True
 
     def _chunks(self):

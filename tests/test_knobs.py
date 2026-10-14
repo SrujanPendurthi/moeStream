@@ -68,3 +68,15 @@ def test_prefetch_and_thread_proposals(bf16):
     old = prefetch.threads()
     proposals = {ks["threads"].propose(), ks["threads"].propose()}
     assert proposals == {old * 2, old // 2}
+
+
+def test_new_slot_arrays_start_as_zeros_not_a_random_float32_tensor(bf16, monkeypatch):
+    m, _ = load(bf16[0], slots=4)
+    moe = [l.mlp for l in m.layers if isinstance(l.mlp, StreamingMoE)][0]
+    glu = moe.io.make_glu(6)
+    assert glu.gate_proj.weight.shape[0] == 6 and not mx.any(glu.gate_proj.weight).item()
+    cleared = []
+    monkeypatch.setattr(mx, "clear_cache", lambda: cleared.append(1))
+    k = {k.name: k for k in system_knobs(m, max_slots=12)}["slots"]
+    k.apply({1: 2, 2: 6, 3: 4})
+    assert cleared  # freed slot buffers go back to the OS, or a shrink frees nothing

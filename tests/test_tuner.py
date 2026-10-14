@@ -51,7 +51,7 @@ def test_interrupt_drops_half_pair_and_reverts_arm(tmp_path):
     cur, t = {"v": "old"}, [0.0]
     tuner = Tuner([_live(cur)], lambda: None, tmp_path, "fp", clock=lambda: t[0])
     tuner.idle()
-    for _ in range(Tuner.WINDOW + 1):
+    for _ in range(Tuner.WARM + Tuner.WINDOW + 1):
         t[0] += 1; tuner.on_token()
     assert cur["v"] == "new"              # candidate arm running
     tuner.interrupt()
@@ -88,7 +88,7 @@ def test_failing_apply_disables_knob_and_reverts(tmp_path):
     tuner = Tuner([Knob("x", "live", lambda: cur["v"], apply, lambda: "new")], lambda: None, tmp_path, "fp",
                   clock=lambda: t[0])
     tuner.idle()
-    for _ in range(Tuner.WINDOW + 1):
+    for _ in range(Tuner.WARM + Tuner.WINDOW + 1):
         t[0] += 1; tuner.on_token()
     assert cur["v"] == "old" and "x" in tuner.disabled and tuner.trial is None
 
@@ -214,3 +214,79 @@ def test_start_wires_hooks_traces_and_resumes_state(tmp_path):
     m3(mx.array([[1, 2, 3]]))
     assert t3.tokens == 0  # prefill is not a decode token
     t3.pool.shutdown()
+
+
+def test_ab_runs_abba_after_a_warm_up():
+    import tempfile
+
+    cur, t, switches = {"v": "old"}, [0.0], []
+
+    def apply(v):
+        switches.append((tuner.tokens, v)); cur.update(v=v)
+
+    tuner = Tuner([Knob("x", "live", lambda: cur["v"], apply, lambda: "new")], lambda: None, tempfile.mkdtemp(), "fp",
+                  clock=lambda: t[0])
+    tuner.idle()
+    for _ in range(Tuner.WINDOW + 1):
+        t[0] += 1; tuner.on_token()
+    assert switches == []                      # the first tokens after a break only warm the cache
+    for _ in range(Tuner.WARM + 3 * Tuner.WINDOW):
+        t[0] += 1; tuner.on_token()
+    assert [v for _, v in switches] == ["new", "old"]
+    assert switches[1][0] - switches[0][0] == 2 * Tuner.WINDOW  # pair 2 starts with the candidate: A B B A
+
+
+def test_live_trial_without_pairs_ends_as_no_decision(tmp_path):
+    cur, t = {"v": "old"}, [0.0]
+    tuner = Tuner([_live(cur)], lambda: None, tmp_path, "fp", clock=lambda: t[0])
+    tuner.idle()
+    assert tuner.trial is not None
+    t[0] += Tuner.AB_TIMEOUT + 1
+    tuner.idle()
+    assert tuner.trial is None and cur["v"] == "old" and "x" not in tuner.rejected
+
+
+def test_dead_worker_pool_disables_replay_knobs_without_raising(tmp_path):
+    class Dead:
+        def submit(self, *a):
+            raise RuntimeError("BrokenProcessPool")
+
+    knob = Knob("policy", "replay", lambda: "lfu", lambda v: None)
+    tuner = Tuner([knob], _replay_snap, tmp_path, "fp", pool=Dead())
+    tuner.idle()
+    assert tuner.trial is None and "policy" in tuner.disabled
+
+
+def test_cancel_ends_a_guard_phase_trial_and_returns_the_old_value(tmp_path):
+    cur = {"v": "lfu"}
+    knob = Knob("policy", "replay", lambda: cur["v"], lambda v: cur.update(v=v), changes_math=True)
+    tuner = Tuner([knob], _replay_snap, tmp_path, "fp", pool=Now(), guard=FakeGuard(True))
+    tuner.idle(); tuner.idle()
+    assert tuner.trial["phase"] == "guard"
+    assert tuner.cancel("policy") == "lfu" and tuner.trial is None and "policy" not in tuner.rejected
+    tuner.idle()
+    assert tuner.trial is None or tuner.trial["phase"] == "replay"
+
+
+def test_hook_error_detaches_tuning_and_decode_goes_on(tmp_path):
+    import mlx.core as mx
+
+    from moestream.config import EngineConfig
+    from moestream.load import load
+    from moestream.tune import start
+    from scripts.pack_experts import pack
+    from tests.tiny import quantized_model_dir
+
+    d, _ = quantized_model_dir(tmp_path)
+    pack(d, tmp_path / "packed")
+    m, _ = load(tmp_path / "packed", slots=4)
+    tuner = start(m, None, EngineConfig(pack_dir=str(tmp_path / "packed"), tuning_dir=str(tmp_path / "t"), tune=False,
+                                        kv_bits=0))
+
+    def boom():
+        raise OSError("disk full")
+
+    tuner.interrupt = boom
+    with pytest.warns(UserWarning, match="tuning off"):
+        m(mx.array([[1, 2, 3]]))
+    assert m.layers[-1].mlp.io.hook is None

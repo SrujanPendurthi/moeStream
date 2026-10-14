@@ -22,20 +22,24 @@ from tools.calibrate import HALF_LIVES, miss_rate
 
 
 class Ring:
-    """The last `cap` routing rows of one layer; StreamingMoE appends to it through io.trace."""
+    """The last `cap` routing rows of one layer, in one preallocated buffer of 2 x cap rows.
+    StreamingMoE appends to it through io.trace."""
 
     def __init__(self, cap):
-        self.cap, self.parts, self.n = cap, [], 0
+        self.cap, self.buf, self.n = cap, None, 0
 
     def append(self, rows):
-        self.parts.append(rows)
+        rows = rows[-self.cap :]
+        if self.buf is None:
+            self.buf = np.empty((2 * self.cap, rows.shape[1]), np.uint8)
+        if self.n + len(rows) > len(self.buf):  # slide the last cap rows to the front
+            self.buf[: self.cap] = self.buf[self.n - self.cap : self.n]
+            self.n = self.cap
+        self.buf[self.n : self.n + len(rows)] = rows
         self.n += len(rows)
-        if self.n > 2 * self.cap:  # ponytail: holds up to 2x cap rows between compactions
-            self.parts = [self.rows()]
-            self.n = len(self.parts[0])
 
     def rows(self):
-        return np.concatenate(self.parts)[-self.cap :] if self.parts else None
+        return self.buf[max(0, self.n - self.cap) : self.n].copy() if self.n else None
 
 
 def replay_rate(rows, slots, policy, half_life, num_experts):
@@ -87,6 +91,8 @@ def _plain(o):
 
 class Tuner:
     WINDOW = 64       # tokens per A/B window
+    WARM = 64         # decode tokens after a break (prefill, idle) that only re-warm the cache: not measured
+    AB_TIMEOUT = 600  # seconds without a completed pair before a live trial ends with no decision
     STATS = 256       # tokens per logged stats window
     MIN_GAIN = 0.01   # replay: candidate miss rate must be at least 1% lower
 
@@ -99,7 +105,7 @@ class Tuner:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.fp, self.trial_on, self.retry_tokens = fingerprint, trial, retry_tokens
         self.trial, self.disabled, self.rejected, self.next_i = None, set(), {}, 0
-        self.tokens, self.last_tok, self.quiet = 0, None, False
+        self.tokens, self.last_tok, self.quiet, self.since = 0, None, False, 0
         self.ab_s = self.ab_n = self.st_s = self.st_n = 0
         self.last_counts, self.window_hit = counts(), 0.0
 
@@ -113,10 +119,12 @@ class Tuner:
         if last is None:
             return
         dt = now - last
-        self.ab_s += dt; self.ab_n += 1
-        if self.ab_n == self.WINDOW:
-            self._window(self.ab_s)
-            self.ab_s = self.ab_n = 0
+        self.since += 1
+        if self.since > self.WARM:
+            self.ab_s += dt; self.ab_n += 1
+            if self.ab_n == self.WINDOW:
+                self._window(self.ab_s)
+                self.ab_s = self.ab_n = 0
         self.st_s += dt; self.st_n += 1
         if self.st_n == self.STATS:
             h, m = self.counts()
@@ -128,11 +136,22 @@ class Tuner:
     def interrupt(self):
         """Prefill or idle: the token stream broke. Drop the partial window and any half pair."""
         self.last_tok = None
-        self.ab_s = self.ab_n = 0
+        self.ab_s = self.ab_n = self.since = 0
         t = self.trial
-        if t and t["phase"] == "ab" and t["pending"] is not None:
+        if t and t["phase"] == "ab":
             t["pending"] = None
-            self._switch(t["old"])
+            first = "old" if len(t["pairs"]) % 2 == 0 else "new"  # A B, then B A: neither arm always runs first
+            if t["arm"] != first:
+                self._arm(t, first)
+
+    def cancel(self, name):
+        """End an in-flight trial of `name` with no decision. Returns the pre-trial value if a candidate is live."""
+        t = self.trial
+        if t is None or t["knob"] != name:
+            return None
+        self.trial = None
+        self.log({"knob": name, "cancelled": t["phase"]})
+        return t["old"] if t["phase"] == "guard" else None
 
     # generation thread, no request waiting; one bounded slice
     def idle(self):
@@ -148,6 +167,10 @@ class Tuner:
             self._start_next()
         elif t["phase"] == "replay" and t["future"].done():
             self._replay_done(t)
+        elif t["phase"] == "ab" and self.clock() - t["last_pair"] > self.AB_TIMEOUT:
+            self.trial = None  # traffic too short for pairs: no decision, retried on its next turn
+            self._set(t["knob"], t["old"], disable=False)
+            self.log({"knob": t["knob"], "cancelled": "ab timeout", "pairs": len(t["pairs"])})
         elif t["phase"] == "guard":
             v = self._guard_step()
             if v is not None:
@@ -176,13 +199,19 @@ class Tuner:
                 snap = self.snapshot()
                 if snap is None:
                     continue
-                self.trial = dict(knob=name, old=old, new=None, phase="replay",
-                                  future=self.pool.submit(replay_trial, name, snap))
+                try:
+                    future = self.pool.submit(replay_trial, name, snap)
+                except Exception as e:  # the worker pool died (e.g. a worker was killed): replay knobs stop
+                    self.disabled |= {n for n, k in self.knobs.items() if k.tier == "replay"}
+                    self.log({"knob": name, "error": repr(e)})
+                    continue
+                self.trial = dict(knob=name, old=old, new=None, phase="replay", future=future)
             else:
                 new = k.propose()
                 if new is None or new == old:
                     continue
-                self.trial = dict(knob=name, old=old, new=new, phase="ab", pending=None, pairs=[])
+                self.trial = dict(knob=name, old=old, new=new, phase="ab", arm="old", pending=None, pairs=[],
+                                  last_pair=self.clock())
             return
 
     def _eligible(self, name):
@@ -193,16 +222,21 @@ class Tuner:
         t = self.trial
         if t is None or t["phase"] != "ab":
             return
-        if t["pending"] is None:   # the current arm just ran; run the candidate next
-            t["pending"] = secs
-            self._switch(t["new"])
+        if t["pending"] is None:   # first arm of the pair just ran; run the other one
+            t["pending"] = (t["arm"], secs)
+            self._arm(t, "new" if t["arm"] == "old" else "old")
             return
-        t["pairs"].append((t["pending"], secs))
+        first, s0 = t["pending"]
         t["pending"] = None
-        if self._switch(t["old"]):
-            keep = ab_keep(t["pairs"])
-            if keep is not None:
-                self._finish(keep, pairs=t["pairs"])
+        t["pairs"].append((s0, secs) if first == "old" else (secs, s0))  # always (current, candidate)
+        t["last_pair"] = self.clock()
+        keep = ab_keep(t["pairs"])  # the next pair starts on the arm this one ended on
+        if keep is not None:
+            self._finish(keep, pairs=t["pairs"])
+
+    def _arm(self, t, arm):
+        if self._switch(t[arm]):
+            t["arm"] = arm
 
     def _replay_done(self, t):
         e = t["future"].exception()
@@ -258,7 +292,9 @@ class Tuner:
 
     def save(self):
         values = {n: k.get() for n, k in self.knobs.items()}
-        (self.dir / "state.json").write_text(json.dumps({"fingerprint": self.fp, "values": values}, default=_plain))
+        tmp = self.dir / "state.json.tmp"
+        tmp.write_text(json.dumps({"fingerprint": self.fp, "values": values}, default=_plain))
+        os.replace(tmp, self.dir / "state.json")  # a crash mid-write never leaves half a state file
 
     def load_state(self):
         try:
@@ -291,9 +327,10 @@ def start(model, tok, cfg, prompts=None, probe_tokens=2048):
 
     moe = [(i, l.mlp) for i, l in enumerate(model.layers) if isinstance(l.mlp, StreamingMoE)]
     E = moe[0][1].io.layout["num_experts"]
-    box = {}
-    knobs = system_knobs(model, sum(m.io.store.slots for _, m in moe),
-                         ready=lambda: not box["pressure"].shrunk)
+    knobs = system_knobs(model, sum(m.io.store.slots for _, m in moe))
+    i = next(j for j, k in enumerate(knobs) if k.name == "slots")
+    pressure = Pressure(knobs[i], min(16, E))
+    knobs[i] = pressure.guarded()
 
     def snapshot():
         rows = {i: m.io.trace.rows() for i, m in moe}
@@ -320,16 +357,20 @@ def start(model, tok, cfg, prompts=None, probe_tokens=2048):
         guard = Guard(model, prompts, d / "reference.npz", key, total=probe_tokens)
         pool = ProcessPoolExecutor(2, initializer=os.nice, initargs=(10,))
     tuner = Tuner(knobs, snapshot, d, fingerprint(cfg), guard=guard, pool=pool, counts=counts, trial=cfg.tune)
-    box["pressure"] = Pressure(next(k for k in knobs if k.name == "slots"), min(16, E), log=tuner.log)
+    pressure.log, pressure.cancel = tuner.log, lambda: tuner.cancel("slots")
     if guard is None or guard.ready:
         tuner.load_state()  # else it waits for the untuned reference to be built (Tuner.idle)
 
     def hook(decode):
-        if decode:
-            tuner.on_token()
-            box["pressure"].on_token()
-        else:
-            tuner.interrupt()
+        try:
+            if decode:
+                tuner.on_token()
+                pressure.on_token()
+            else:
+                tuner.interrupt()
+        except Exception as e:  # tuning never stops serving
+            moe[-1][1].io.hook = None
+            warnings.warn(f"tuning off: {e!r}")
 
     moe[-1][1].io.hook = hook
     return tuner

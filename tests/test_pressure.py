@@ -47,3 +47,30 @@ def test_growing_swap_shrinks_even_with_free_memory():
     mem["swap"] = 1e6
     p.on_token()
     assert p.shrunk and sum(k.v.values()) < 200
+
+
+def _knob():
+    from moestream.tune import Knob
+
+    s = Split()
+    return s, Knob("slots", "replay", s.get, s.apply, changes_math=True)
+
+
+def test_guarded_knob_writes_go_to_the_restore_target_while_shrunk():
+    s, k = _knob()
+    p = Pressure(k, 16, every=1, free=lambda: 0.5 * GB, swap=lambda: 0.0, clock=lambda: 0.0, log=lambda r: None)
+    g = p.guarded()
+    p.on_token()
+    shrunk = dict(s.v)
+    assert g.get() == {1: 100, 2: 100} and not g.ready()      # saved state never records the shrunk split
+    g.apply({"1": 120, "2": 80})
+    assert s.v == shrunk and p.target == {1: 120, 2: 80}      # no resize while memory is short
+
+
+def test_shrink_cancels_a_slot_trial_and_restores_its_old_split():
+    s, k = _knob()
+    s.v = {1: 130, 2: 70}                                     # candidate under its KL guard
+    p = Pressure(k, 16, every=1, free=lambda: 0.5 * GB, swap=lambda: 0.0, clock=lambda: 0.0, log=lambda r: None,
+                 cancel=lambda: {1: 100, 2: 100})
+    p.on_token()
+    assert p.target == {1: 100, 2: 100} and sum(s.v.values()) == 180
