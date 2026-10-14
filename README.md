@@ -45,6 +45,21 @@ Note on 1: on 3 prompts x 128 tokens, outputs first diverge at tokens 19, 104 an
 
 moeStream time split per token: sync 206.4 ms, read 7.9 ms, write 3.2 ms. `speedup_vs_lagunaLab` 0.306 (fail), `ctx_decode_ratio` 0.702 (fail, warm passes), `identical_to_lagunaLab` false.
 
+## Speed gate (sub-project 0, `results/bench_slots*.json`, `results/bench_evalwrites.json`)
+
+The Phase 1 conclusion above ("build zero-copy Metal") was wrong. `sync_ms_per_tok` timed `mx.eval` on the lazy graph, so it included the slot writes queued before it. With writes forced into their own timer (`--eval-writes`) at the calibrated 128-256 slots and a 16.08 GB peak, writes took 140 ms per token, about 5.5 ms per fill. The same write path on a synthetic real-shaped layer costs 0.10-0.28 ms per fill at 32, 128 and 256 slots, so writes do not copy the slot tensor. The slowdown was memory pressure: swap was in use, and `budget.probe` counts inactive pages as free.
+
+Each row below comes from a single run with its own lagunaLab baseline. The baseline varies 10.3-15.5 tok/s between runs, so compare within a row.
+
+| run | moeStream tok/s | lagunaLab tok/s | ratio | 16k-ctx decode (moeStream / lagunaLab) | moeStream peak GB |
+|---|---|---|---|---|---|
+| `--slots 32` | 8.10 | 10.28 | 0.79 | 4.01 / 7.45 | 5.91 |
+| `--eval-writes` (128-256, before reboot) | 4.12 | 11.15 | 0.37 | 2.57 / 7.07 | 16.08 |
+| `--slots 128` | 12.25 | 13.65 | 0.90 | 11.58 / 8.45 | 12.80 |
+| `--slots 128 --no-prefetch` | 14.58 | 15.51 | 0.94 | 11.40 / 7.96 | 12.80 |
+
+At 128 slots and 12.8 GB, moeStream is 0.90-0.94x lagunaLab on short-prompt decode, 1.37-1.43x on 16k-context decode, and about 1.5x on prefill. Lookahead prefetch roughly breaks even. It hides about 10 ms of reads but adds about 18 ms of sync per token.
+
 ## Next
 
-`sync_ms_per_tok` dominates (145 ms vs 10 ms read, 4 ms write), and hit rate is already 0.90, so better prediction (Laya) will not close the gap. Build Phase 2: zero-copy Metal.
+The gate as written ("decode >= lagunaLab at equal or lower memory") fails. moeStream trades memory for long-context speed. Rewording the gate is the user's decision. Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds an explicit memory cap in place of the free-page probe.

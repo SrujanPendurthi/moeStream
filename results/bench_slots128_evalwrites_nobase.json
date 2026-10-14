@@ -1,0 +1,23 @@
+{
+ "rows": [
+  {
+   "label": "moeStream",
+   "decode_tok_s": 13.909478918336594,
+   "peak_gpu_gb": 12.795978736,
+   "hit_rate_decode": 0.859209906454001,
+   "sync_ms_per_tok": 37.41104532024788,
+   "read_ms_per_tok": 12.625967763805422,
+   "write_ms_per_tok": 14.655457818891563,
+   "pred_acc": 0.7023155822627435,
+   "slots_per_layer": [
+    128,
+    128
+   ],
+   "ctx_tokens": 16000,
+   "prefill_ctx_tok_s": 121.00618510982036,
+   "decode_ctx_tok_s": 11.932061638354108,
+   "ctx_decode_ratio": 0.857836710376282
+  }
+ ],
+ "cold": false
+}
