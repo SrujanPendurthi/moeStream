@@ -1,0 +1,10 @@
+# moeStream engine settings. Relative paths resolve against this file.
+pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
+memory_gb = 20.0          # peak GPU memory the engine may use; omit to probe free memory
+context_tokens = 32768    # longest session the KV reservation is sized for
+kv_bits = 0               # 0 = bf16 (lossless), 8 or 4 = quantized
+eviction = "lfu"          # lfu | lru | fifo
+# half_life = 64          # lfu only; omitted = take it from the calibration file
+calibration = "budget.json"
+thinking = true           # Laguna's built-in <think> reasoning; the model's own default is on
+port = 8081
