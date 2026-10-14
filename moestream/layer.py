@@ -21,6 +21,13 @@ from scripts.pack_experts import expert_from_bytes
 EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of the next layer's sync_s
 
 
+def _glu(args, slots, group_size, bits, dtype):
+    glu = SwitchGLU(args.hidden_size, args.moe_intermediate_size, slots)
+    glu.set_dtype(dtype)  # match packed scales dtype: no cast on write
+    nn.quantize(glu, group_size=group_size, bits=bits)
+    return glu
+
+
 class StreamingMoE(nn.Module):
     route = laguna.SparseMoeBlock.route
 
@@ -33,12 +40,11 @@ class StreamingMoE(nn.Module):
         self.gate = nn.Linear(h, args.num_experts, bias=False)
         self.e_score_correction_bias = mx.zeros((args.num_experts,))
         self.shared_expert = laguna.MLP(h, args.shared_expert_intermediate_size)
-        glu = SwitchGLU(h, args.moe_intermediate_size, slots)
-        glu.set_dtype(dtype)  # match packed scales dtype: no cast on write
-        nn.quantize(glu, group_size=group_size, bits=bits)
         # SimpleNamespace keeps slots and links out of the parameter tree (load_weights strict=True)
         self.io = SimpleNamespace(
-            glu=glu, layout=layout, next=None, predictor=None, trace=None, guess=None,
+            glu=_glu(args, slots, group_size, bits, dtype),
+            make_glu=lambda n: _glu(args, n, group_size, bits, dtype),
+            layout=layout, next=None, predictor=None, trace=None, guess=None, lookahead=True, hook=None,
             store=SlotStore(args.num_experts, slots, half_life, policy),
             prefetcher=Prefetcher(Path(pack_dir) / "experts" / f"layer_{layer:02d}.bin", layout["stride"],
                                   keep=2 * self.top_k),
@@ -49,7 +55,7 @@ class StreamingMoE(nn.Module):
         io = self.io
         inds, w = self.route(x)
         decode = x.shape[0] * x.shape[1] == 1
-        lookahead = decode and io.next is not None and io.predictor is None
+        lookahead = decode and io.next is not None and io.predictor is None and io.lookahead
         t0 = time.perf_counter()
         if lookahead:
             pinds = io.next.route(x)[0]
@@ -72,12 +78,32 @@ class StreamingMoE(nn.Module):
                            masked=len(experts) > io.store.slots)
             y = yg if y is None else y + yg
         io.prefetcher.drop_pending()
-        if decode and io.next is not None:
+        if decode and io.next is not None and (lookahead or io.predictor is not None):
             guess = np.unique(np.array(pinds)).tolist() if lookahead else list(io.predictor(x))
             io.next.io.guess = set(guess)
             io.next.io.prefetcher.submit([e for e in guess if e not in io.next.io.store.expert_slot])
         y = (y * w[..., None]).sum(axis=-2)
+        if io.hook is not None:
+            io.hook(decode)
         return y * self.routed_scaling_factor + self.shared_expert(x)
+
+    def resize(self, n):
+        """Change this layer's slot count between tokens, keeping the n experts the eviction key ranks highest."""
+        io, old = self.io, self.io.store
+        keep = sorted(old.expert_slot, key=old.key, reverse=True)[:n]
+        store = SlotStore(len(old.score), n, old.half_life, old.policy)
+        store.score, store.last, store.loaded = old.score, old.last, old.loaded
+        store.clock, store.hits, store.misses = old.clock, old.hits, old.misses
+        glu = io.make_glu(n)
+        if keep:
+            src = mx.array([old.expert_slot[e] for e in keep])
+            for proj in ("gate_proj", "up_proj", "down_proj"):
+                for part in ("weight", "scales", "biases"):
+                    getattr(getattr(glu, proj), part)[: len(keep)] = getattr(getattr(io.glu, proj), part)[src]
+        for s, e in enumerate(keep):
+            store.slot_expert[s], store.expert_slot[e] = e, s
+        mx.eval(glu.parameters())
+        io.glu, io.store = glu, store
 
     def _run(self, x, idx, group, counts, masked):
         io = self.io

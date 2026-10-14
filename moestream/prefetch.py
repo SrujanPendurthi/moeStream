@@ -11,6 +11,17 @@ import numpy as np
 _POOL = ThreadPoolExecutor(8)
 
 
+def threads():
+    return _POOL._max_workers
+
+
+def set_threads(n):
+    """Swap the read pool; reads already queued finish on the old one."""
+    global _POOL
+    old, _POOL = _POOL, ThreadPoolExecutor(n)
+    old.shutdown(wait=False)
+
+
 class Prefetcher:
     def __init__(self, path, stride, keep=16):
         self.fd = os.open(path, os.O_RDONLY)

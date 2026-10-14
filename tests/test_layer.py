@@ -240,3 +240,54 @@ def test_config_load_reserves_kv_for_the_live_and_one_stored_session(packed, tmp
     # 3 GB covers resident + 1 GB activations + one 32k-token bf16 KV (1.34 GB), not two
     with pytest.raises(ValueError, match="KV"):
         load(EngineConfig(pack_dir=str(out), memory_gb=3.0, kv_bits=0, context_tokens=32768))
+
+
+def test_resize_between_tokens_keeps_decode_bit_exact(tmp_path):
+    d, resident = quantized_model_dir(tmp_path, dtype=mx.bfloat16)
+    out = tmp_path / "packed"
+    pack(d, out)
+    m, _ = load(out, slots=4)
+    ids = _ids(16, seed=3)
+    cache = m.make_cache()
+    got = [m(ids[:, :8], cache=cache)]
+    for i in range(8, 16):
+        if i in (10, 13):
+            for moe in _moe(m):
+                moe.resize(2 if i == 10 else 6)
+        got.append(m(ids[:, i : i + 1], cache=cache))
+    want = _decode(resident, ids, 8)
+    assert mx.array_equal(mx.concatenate(got, axis=1), want).item()
+    assert {moe.io.store.slots for moe in _moe(m)} == {6}
+
+
+def test_resize_keeps_the_experts_eviction_ranks_highest(packed):
+    out, _ = packed
+    m, _ = load(out, slots=4)
+    m(_ids(12))
+    moe = _moe(m)[0]
+    st = moe.io.store
+    best = sorted(st.expert_slot, key=st.key, reverse=True)[:2]
+    hits, misses = st.hits, st.misses
+    moe.resize(2)
+    new = moe.io.store
+    assert new.slots == 2 and set(new.expert_slot) == set(best)
+    assert (new.hits, new.misses, new.policy) == (hits, misses, st.policy)
+
+
+def test_lookahead_off_skips_prediction_and_stays_exact(packed):
+    out, resident = packed
+    m, _ = load(out, slots=4)
+    for moe in _moe(m):
+        moe.io.lookahead = False
+    ids = _ids(16, seed=7)
+    _close(_decode(m, ids, 10), resident(ids))
+    assert stream_stats(m)["pred_acc"] == 0
+
+
+def test_hook_sees_decode_and_prefill(packed):
+    out, _ = packed
+    m, _ = load(out, slots=4)
+    seen = []
+    _moe(m)[-1].io.hook = seen.append
+    _decode(m, _ids(6), 4)
+    assert seen == [False, True, True]

@@ -65,3 +65,18 @@ def test_free_list_is_capped_after_a_big_batch(tmp_path):
     for buf in pf.take([0, 1, 2, 3, 4, 5]).values():  # prefill-sized fill batch
         pf.release(buf)
     assert len(pf.free) == 2
+
+
+def test_thread_count_changes_and_reads_still_work(tmp_path):
+    from moestream import prefetch
+
+    f = tmp_path / "x.bin"
+    f.write_bytes(bytes(range(256)) * 2)
+    old = prefetch.threads()
+    try:
+        prefetch.set_threads(3)
+        assert prefetch.threads() == 3
+        p = prefetch.Prefetcher(f, 256)
+        assert p.take([1])[1][5] == 5
+    finally:
+        prefetch.set_threads(old)
