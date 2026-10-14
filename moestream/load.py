@@ -9,6 +9,7 @@ import mlx.nn as nn
 
 from laguna_mlx import laguna
 from moestream.budget import GB, allocate, cap_budget_bytes, free_bytes, probe, uniform
+from moestream.config import EngineConfig
 from moestream.layer import StreamingMoE
 
 
@@ -25,6 +26,10 @@ def _per_layer_slots(layers, E, stride, budget, cal, floor):
 
 def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=None, half_life=None,
          target_ctx=32768, kv_bits=0, eviction="lfu", floor=16):
+    if isinstance(pack_dir, EngineConfig):
+        c = pack_dir
+        return load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
+                    target_ctx=c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction, floor=floor)
     pack_dir = Path(pack_dir)
     config = json.loads((pack_dir / "config.json").read_text())
     layout = json.loads((pack_dir / "layout.json").read_text())
@@ -78,9 +83,15 @@ def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=No
     nn.quantize(model, group_size=q["group_size"], bits=q["bits"], class_predicate=predicate)
     model.load_weights(str(pack_dir / "resident.safetensors"), strict=True)
     mx.eval(model.parameters())
+    if kv_bits:
+        from laguna_mlx.cache import make_quantized_cache
+
+        gs = 64 if args.head_dim % 64 == 0 else 32
+        make_quantized_cache(model, bits=kv_bits, group_size=gs)  # bad head_dim fails here, not mid-generation
+        model.make_cache = lambda: make_quantized_cache(model, bits=kv_bits, group_size=gs)
     n = sum(per.values())
     print(f"moeStream: {n} slots ({n * stride / GB:.2f} GB), per layer {min(per.values())}-{max(per.values())}, "
-          f"half-life {half_life:g}, eviction {eviction}", file=sys.stderr)
+          f"half-life {half_life:g}, eviction {eviction}, kv {kv_bits or 16}-bit", file=sys.stderr)
     tok = None
     if (pack_dir / "tokenizer.json").exists():
         from mlx_lm.utils import load_tokenizer

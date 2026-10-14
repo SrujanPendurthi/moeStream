@@ -4,6 +4,9 @@ import mlx.core as mx
 import numpy as np
 import pytest
 
+from mlx_lm.models.cache import RotatingKVCache
+
+from moestream.config import EngineConfig
 from moestream.layer import StreamingMoE, stream_stats
 from moestream.load import load
 from scripts.pack_experts import pack
@@ -193,3 +196,39 @@ def test_memory_gb_over_free_memory_warns_with_known_good_point(packed, monkeypa
         m, _ = load(out, memory_gb=50.0)
     ids = _ids(12)
     _close(m(ids), resident(ids))
+
+
+def test_kv_bits_on_unquantizable_head_dim_fails_at_load(packed):
+    out, _ = packed  # tiny model: head_dim 16, below the smallest group size (32)
+    with pytest.raises(ValueError, match="head_dim"):
+        load(out, slots=4, kv_bits=8)
+
+
+def test_kv_bits_8_quantizes_full_layers_only_and_stays_close(tmp_path, monkeypatch):
+    monkeypatch.setitem(TINY, "head_dim", 32)
+    d, _ = quantized_model_dir(tmp_path)
+    out = tmp_path / "packed"
+    pack(d, out)
+    plain, _ = load(out, slots=4)
+    quant, _ = load(out, slots=4, kv_bits=8)
+    for c, t in zip(quant.make_cache(), TINY["layer_types"]):
+        if t == "full_attention":
+            # mlx-lm routes any cache with `bits` to its score-materializing attention (machine hang)
+            assert c.kv_bits == 8 and not hasattr(c, "bits")
+        else:
+            assert isinstance(c, RotatingKVCache)
+    ids = _ids(12)
+    a, b = np.array(_decode(plain, ids, 6)), np.array(_decode(quant, ids, 6))
+    assert np.isfinite(b).all()
+    assert np.abs(a - b).max() < 0.1 * np.abs(a).max()
+
+
+def test_load_from_config_file(packed, tmp_path, monkeypatch):
+    out, resident = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)  # independent of what else is running
+    f = tmp_path / "engine.toml"
+    f.write_text(f'pack_dir = "{out}"\nmemory_gb = 50.0\neviction = "fifo"\n')
+    m, _ = load(EngineConfig.read(f))
+    assert {moe.io.store.policy for moe in _moe(m)} == {"fifo"}
+    ids = _ids(12)
+    _close(_decode(m, ids, 6), resident(ids))

@@ -76,10 +76,13 @@ The split of those slots across layers is unchanged: `allocate` from the calibra
 
 ## KV quantization
 
-`load` replaces the model's cache factory when `kv_bits` is 8 or 4: mlx-lm's
-`QuantizedKVCache(bits=kv_bits)` on the 10 full-attention layers, `RotatingKVCache` unchanged on
-the sliding ones (their window is fixed at about 60 MB). No new quantizer. `kv_bits = 0` leaves
-`laguna.Model.make_cache` as it is.
+`load` replaces the model's cache factory when `kv_bits` is 8 or 4, using lagunaLab's
+`laguna_mlx.cache.make_quantized_cache`: K/V stored at `kv_bits` on the 10 full-attention layers
+(`DequantKVCache`, attends in bf16 through the fused kernel), `RotatingKVCache` unchanged on the
+sliding ones. Not raw mlx-lm `QuantizedKVCache`: lagunaLab found its quantized attention builds
+the full score matrix (~16 GB per layer at 82k context) and hung the machine. The cache objects
+must never expose a `bits` attribute, since mlx-lm routes those to that attention path.
+`kv_bits = 0` leaves `laguna.Model.make_cache` as it is.
 
 Not known yet: decode speed with `QuantizedKVCache` at long context, and its quality cost on
 Laguna. lagunaLab's Part 3 plan measures quality; this spec measures speed in its verification
