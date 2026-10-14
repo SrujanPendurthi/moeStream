@@ -179,7 +179,22 @@ Through the GPU lock, under `tools/watch.sh 8 21`, after sub-project 1's Task 6.
 
 ## Later levels (own specs; known constraints)
 
-**Bit level.** Per-expert precision: rarely used experts at lower bits, so more experts fit in the
+**Bit level.** Covers the literal bits, not only precision. Two kinds of change, guarded
+differently:
+
+- *Lossless* (exact same weights, different bits on disk or in memory): entropy-coding the 4-bit
+  codes on SSD so each miss reads fewer bytes, re-laying out codes, scales and biases for faster
+  reads or dequant. Guard: decoded weights byte-identical to the pack. No KL needed; exactness is
+  a stronger and cheaper check.
+- *Lossy* (different numbers): per-expert precision, scale and bias formats (bf16 to fp8 or
+  shared), codebook or non-uniform quantization. Guard, in layers, cheapest first:
+  1. per-expert output error on activations captured from live traffic for that expert (catches
+     cold experts the probe never routes to);
+  2. the strict KL guard, with probe tokens chosen from traces that route to the changed experts;
+  3. the harness eval (sub-project 2), run periodically on the accumulated lossy changes, since
+     one-step KL does not see multi-turn or tool-call drift.
+
+Per-expert precision: rarely used experts at lower bits, so more experts fit in the
 cap and each miss reads fewer bytes. Known now:
 - The packed experts are already 4-bit, and there is no bf16 source on disk (`lagunaLab/models/Laguna-XS-2.1`
   holds only the config). Hot experts **cannot go above 4-bit** without downloading the bf16 model
