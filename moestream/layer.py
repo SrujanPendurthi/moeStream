@@ -18,6 +18,8 @@ from moestream.prefetch import Prefetcher
 from moestream.store import SlotStore
 from scripts.pack_experts import expert_from_bytes
 
+EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of the next layer's sync_s
+
 
 class StreamingMoE(nn.Module):
     route = laguna.SparseMoeBlock.route
@@ -88,6 +90,8 @@ class StreamingMoE(nn.Module):
                 proj, part = name.split(".")
                 getattr(getattr(io.glu, proj), part)[s] = arr
             io.prefetcher.release(bufs[e])
+        if EVAL_WRITES and fills:
+            mx.eval(io.glu.parameters())
         io.stats["read_s"] += t1 - t0
         io.stats["write_s"] += time.perf_counter() - t1
         E = io.layout["num_experts"]

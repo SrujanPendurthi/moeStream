@@ -1,6 +1,6 @@
 """Decode speed, hit rate, prediction accuracy and time split: lagunaLab streaming vs moeStream.
 
-PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X]
+PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes]
 Loads real weights one model at a time: message the other sessions and wait for a go-ahead first.
 """
 import argparse
@@ -71,7 +71,11 @@ def main():
     p.add_argument("--max-tokens", type=int, default=128)
     p.add_argument("--ctx", type=int, default=16000)
     p.add_argument("--cold", action="store_true")
+    p.add_argument("--slots", type=int, default=None, help="diagnostic: same slot count on every layer")
+    p.add_argument("--eval-writes", action="store_true", help="diagnostic: time slot writes in write_s")
     a = p.parse_args()
+    import moestream.layer
+    moestream.layer.EVAL_WRITES = a.eval_writes
     ctx_text = Path("../lagunaLab/tests/reference/modeling_laguna.py").read_text()
     cold_files = sorted(glob.glob("../lagunaLab/models/Laguna-XS-2.1-mlx-4bit/*.safetensors"))
 
@@ -103,12 +107,13 @@ def main():
         return row, outs
 
     base, base_outs = run("lagunaLab slots=32", lambda: load_streaming(a.pack, 32), lab_stats)
-    mine, my_outs = run("moeStream", lambda: load(a.pack, budget_gb=a.budget_gb, calibration=a.calibration),
+    mine, my_outs = run("moeStream", lambda: load(a.pack, slots=a.slots, budget_gb=a.budget_gb, calibration=a.calibration),
                         stream_stats)
     mine["identical_to_lagunaLab"] = my_outs == base_outs
     mine["speedup_vs_lagunaLab"] = mine["decode_tok_s"] / base["decode_tok_s"]
     mine["ctx_decode_ratio"] = mine["decode_ctx_tok_s"] / mine["decode_tok_s"]
-    out = Path("results") / ("bench_cold.json" if a.cold else "bench.json")
+    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "")
+    out = Path("results") / f"bench{tag}.json"
     out.write_text(json.dumps({"rows": [base, mine], "cold": a.cold}, indent=1))
 
 
