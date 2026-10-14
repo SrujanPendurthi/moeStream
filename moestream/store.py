@@ -11,11 +11,9 @@ POLICIES = ("lfu", "lru", "fifo")
 
 class SlotStore:
     def __init__(self, num_experts, slots, half_life=256.0, policy="lfu"):
-        if policy not in POLICIES:
-            raise ValueError(f"eviction policy {policy!r} not in {POLICIES}")
         self.slots = slots
-        self.policy = policy
-        self.decay = 0.5 ** (1.0 / half_life)
+        self.set_policy(policy)
+        self.set_half_life(half_life)
         self.slot_expert = [-1] * slots
         self.expert_slot = {}
         self.score = np.zeros(num_experts)
@@ -23,6 +21,21 @@ class SlotStore:
         self.loaded = np.zeros(num_experts, np.int64)
         self.clock = 0
         self.hits = self.misses = 0
+
+    def set_policy(self, policy):
+        if policy not in POLICIES:
+            raise ValueError(f"eviction policy {policy!r} not in {POLICIES}")
+        self.policy = policy
+
+    def set_half_life(self, half_life):
+        self.half_life = half_life
+        self.decay = 0.5 ** (1.0 / half_life)
+
+    def key(self, e):
+        """Eviction rank of a resident expert: the lowest key is evicted first."""
+        if self.policy == "lfu":
+            return (self.score[e], self.last[e])
+        return (self.last[e] if self.policy == "lru" else self.loaded[e],)
 
     def tick(self, n_tokens=1):
         """Age every score by n_tokens tokens. Call once per layer call, before assign()."""
@@ -51,10 +64,5 @@ class SlotStore:
     def _victims(self, n, keep):
         free = [s for s, e in enumerate(self.slot_expert) if e == -1]
         used = [s for s, e in enumerate(self.slot_expert) if e != -1 and e not in keep]
-        key = {
-            "lfu": lambda e: (self.score[e], self.last[e]),
-            "lru": lambda e: self.last[e],
-            "fifo": lambda e: self.loaded[e],
-        }[self.policy]
-        used.sort(key=lambda s: key(self.slot_expert[s]))
+        used.sort(key=lambda s: self.key(self.slot_expert[s]))
         return (free + used)[:n]

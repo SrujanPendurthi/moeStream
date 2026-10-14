@@ -81,3 +81,24 @@ def test_oldest_load_recently_reused(policy, victim):
 def test_unknown_policy_raises():
     with pytest.raises(ValueError, match="lifo"):
         SlotStore(8, 2, policy="lifo")
+
+
+def test_policy_and_half_life_change_live():
+    s = SlotStore(8, 2, half_life=float("inf"))
+    for _ in range(3):
+        s.tick(); s.assign([0])
+    s.tick(); s.assign([1])          # 0 used most, 1 used last
+    s.set_policy("lru")
+    s.tick(); _, f = s.assign([2])
+    assert f == [(2, 0)]             # lru evicts 0; lfu would have evicted 1
+    s.set_half_life(1.0)
+    assert s.half_life == 1.0 and s.decay == 0.5
+    with pytest.raises(ValueError, match="lifo"):
+        s.set_policy("lifo")
+
+
+def test_key_orders_eviction():
+    s = SlotStore(8, 3, half_life=float("inf"))
+    for e in (0, 0, 1, 2):
+        s.tick(); s.assign([e])
+    assert sorted(s.expert_slot, key=s.key) == [1, 2, 0]
