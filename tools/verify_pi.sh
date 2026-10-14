@@ -26,7 +26,7 @@ EOF
 
 serve() {  # $1 = tag; starts the server in the background, waits until it listens
   echo "=== $1 $(date +%T)" >> "$LOG"
-  PYTHONPATH=.:../lagunaLab "$GPU" moe tools/watch.sh 8 21 python3 -m tools.serve --config results/verify.toml >> "$LOG" 2>&1 &
+  PYTHONPATH=.:../lagunaLab "$GPU" moe tools/watch.sh ${WATCH:-8 21} python3 -m tools.serve --config results/verify.toml >> "$LOG" 2>&1 &
   for _ in $(seq 900); do
     grep -q "aborted: paging" "$LOG" && { echo "$1: aborted: paging"; exit 3; }
     tail -5 "$LOG" | grep -q "Starting httpd" && return 0
@@ -36,9 +36,12 @@ serve() {  # $1 = tag; starts the server in the background, waits until it liste
 }
 
 stop() {  # kill the server by PID (never pkill -f), then let the watchdog print its peaks
-  pid=$(ps -axo pid,command | grep "[p]ython3 -m tools.serve --config results/verify.toml" | awk '{print $1}')
+  # the Python process itself, not watch.sh or gpu-run (their command lines contain the same text)
+  pid=$(ps -axo pid,command | grep -E "[Pp]ython3? -m tools.serve --config results/verify.toml" | grep -v -e watch.sh -e gpu-run | awk '{print $1}')
   [ -n "$pid" ] && kill $pid
-  sleep 5
+  for _ in $(seq 60); do lsof -nP -iTCP:8081 -sTCP:LISTEN > /dev/null || break; sleep 1; done
+  lsof -nP -iTCP:8081 -sTCP:LISTEN > /dev/null && { echo "server still listening on 8081 after 60 s"; exit 1; }
+  sleep 3
   grep "watch: peak" "$LOG" | tail -1
 }
 
@@ -46,7 +49,8 @@ ask() {  # $1 = tag
   local t0=$(date +%s)
   curl -s $URL/chat/completions -H 'Content-Type: application/json' \
     -d '{"model":"Laguna-XS-2.1","messages":[{"role":"user","content":"Write a Python function that reverses a string."}],"max_tokens":512}' \
-    | python3 -c "import json,sys; r=json.load(sys.stdin); m=r['choices'][0]['message']; print('$1', 'reasoning:', bool(m.get('reasoning')), 'usage:', r.get('usage'), 'secs:', $(date +%s)-$t0)" | tee -a "$LOG"
+    > results/ask.json
+  python3 -c "import json,sys; r=json.load(open('results/ask.json')); m=r['choices'][0]['message']; print('$1', 'reasoning:', bool(m.get('reasoning')), 'usage:', r.get('usage'), 'secs:', $(date +%s)-$t0)" | tee -a "$LOG"
 }
 
 pi_session() {

@@ -88,7 +88,20 @@ Watchdog peaks for the whole run (both engines, one process): swap 160 MB, footp
 
 Gate: **passes at 14.4 GB**, with short-prompt decode at the edge of item 1 (10.0% slower). Items 2 and 3 pass. The footprint is about 1.2 GB above moeStream's peak GPU: the prefetcher's staging buffers (numpy, up to 16 free expert-sized buffers per layer, plus those in flight) live outside the GPU budget and are not counted in `memory_gb`. moeStream decode time per token: sync 53 ms, read 8.7 ms, write 3.9 ms.
 
-Consequence: the `memory_gb = 20.0` default in `moestream.toml` should come down to about 14. q8 KV at 128k needs 2.85 GB of KV, so at 14 GB the slots get about 9 GB (about 130 per layer) instead of 12.1 GB.
+Consequence: the `memory_gb = 20.0` default in `moestream.toml` should come down to about 14. At 14 GB with q8 KV at 128k, the budget reserves KV for two sessions (2 x 2.85 GB), so the slots get 6.12 GB (64-128 per layer).
 
 
 Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds the explicit memory cap in place of the free-page probe.
+
+## pi check (engine Task 6, 2026-10-14, `tools/verify_pi.sh`, `results/serve_verify.log`)
+
+Served with `memory_gb = 14.0`, q8 KV, 128k context and tuning off, under the watchdog with a 4 GB swap and 17 GB footprint limit.
+
+| run | slots | curl (512 tokens max) | peak footprint | peak swap |
+|---|---|---|---|---|
+| base (LFU, q8) | 3456 (6.12 GB) | 36 s, with reasoning | 11.0 GB | 289 MB |
+| `eviction = "lru"` | 3456 | 42 s | 8.5 GB | 281 MB |
+| `kv_bits = 0` | 624 (1.10 GB, 16 per layer) | 78 s | 3.9 GB | 273 MB |
+| `thinking = false` | 3456 | 20 s, no reasoning, stopped by itself at 268 tokens | 8.5 GB | 273 MB |
+
+The 3-turn pi session on a small repo (run the tests, fix the bug, add an empty-list test) completed with tool calls. pytest at the end shows 2 passed. The turns took 67, 21 and 71 s. Prefix caching works between turns: after the first 1388-token prompt, requests processed only 22-259 new tokens. bf16 KV at 128k leaves almost no room for slots, which is why q8 is the default.

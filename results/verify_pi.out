@@ -1,0 +1,32 @@
+base reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 36
+pi turn: 67 s
+pi turn: 21 s
+pi turn: 71 s
+pi final pytest: 2 passed in 0.07s
+watch: peak swap 289 MB, peak footprint 11264 MB
+eviction = "lru" reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 42
+watch: peak swap 281 MB, peak footprint 8721 MB
+kv_bits = 0 reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 78
+watch: peak swap 273 MB, peak footprint 4032 MB
+thinking = false reasoning: False usage: {'prompt_tokens': 51, 'completion_tokens': 268, 'total_tokens': 319, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 20
+watch: peak swap 273 MB, peak footprint 8657 MB
+=== base 11:40:01
+moeStream: 3456 slots (6.12 GB), per layer 64-128, half-life 64, eviction lfu, kv 8-bit
+base reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 36
+pi turn: 67 s
+pi turn: 21 s
+pi turn: 71 s
+pi final pytest: 2 passed in 0.07s
+watch: peak swap 289 MB, peak footprint 11264 MB
+=== eviction = "lru" 11:43:21
+moeStream: 3456 slots (6.12 GB), per layer 64-128, half-life 64, eviction lru, kv 8-bit
+eviction = "lru" reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 42
+watch: peak swap 281 MB, peak footprint 8721 MB
+=== kv_bits = 0 11:44:09
+moeStream: 624 slots (1.10 GB), per layer 16-16, half-life 64, eviction lfu, kv 16-bit
+kv_bits = 0 reasoning: True usage: {'prompt_tokens': 51, 'completion_tokens': 512, 'total_tokens': 563, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 78
+watch: peak swap 273 MB, peak footprint 4032 MB
+=== thinking = false 11:45:34
+moeStream: 3456 slots (6.12 GB), per layer 64-128, half-life 64, eviction lfu, kv 8-bit
+thinking = false reasoning: False usage: {'prompt_tokens': 51, 'completion_tokens': 268, 'total_tokens': 319, 'prompt_tokens_details': {'cached_tokens': 0}} secs: 20
+watch: peak swap 273 MB, peak footprint 8657 MB
