@@ -158,3 +158,23 @@ def test_prefill_scores_count_tokens_not_distinct_experts(packed):
     m(_ids(32))
     for moe in _moe(m):
         assert moe.io.store.score.sum() == 32 * TINY["num_experts_per_tok"]
+
+
+@pytest.mark.parametrize("policy", ["lru", "fifo"])
+def test_eviction_policy_reaches_every_layer_and_stays_exact(packed, policy):
+    out, resident = packed
+    m, _ = load(out, slots=4, eviction=policy)
+    assert {moe.io.store.policy for moe in _moe(m)} == {policy}
+    ids = _ids(12)
+    _close(_decode(m, ids, 6), resident(ids))
+
+
+def test_non_lfu_policy_with_calibration_warns(packed, tmp_path):
+    out, _ = packed
+    layers = json.loads((out / "layout.json").read_text())["layers"]
+    cal = tmp_path / "budget.json"
+    cal.write_text(json.dumps({"half_life": 64.0, "grid": [2, 4],
+                               "curves": {str(l): [0.5, 0.1] for l in layers}}))
+    with pytest.warns(UserWarning, match="tuned for lfu"):
+        m, _ = load(out, budget_gb=1.0, calibration=cal, eviction="lru")
+    assert {moe.io.store.policy for moe in _moe(m)} == {"lru"}

@@ -23,7 +23,7 @@ def _per_layer_slots(layers, E, stride, budget, cal, floor):
     return uniform(layers, total, min(floor, E), E)
 
 
-def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=None, target_ctx=32768, floor=16):
+def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=None, target_ctx=32768, eviction="lfu", floor=16):
     pack_dir = Path(pack_dir)
     config = json.loads((pack_dir / "config.json").read_text())
     layout = json.loads((pack_dir / "layout.json").read_text())
@@ -41,6 +41,8 @@ def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=No
             warnings.warn(f"calibration {calibration} does not match layers {layers}; using a uniform split")
             cal = None
     half_life = half_life or (cal["half_life"] if cal else 256.0)
+    if cal is not None and eviction != "lfu":
+        warnings.warn(f"calibration {calibration} was tuned for lfu; using its slot split with {eviction}")
 
     if slots is not None:
         per = {l: slots for l in layers}
@@ -55,7 +57,7 @@ def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=No
     moe = []
     for l in layers:
         model.layers[l].mlp = StreamingMoE(args, l, pack_dir, layout, per[l], half_life,
-                                           q["group_size"], q["bits"], dtype)
+                                           q["group_size"], q["bits"], dtype, policy=eviction)
         moe.append(model.layers[l].mlp)
     for a, b in zip(moe, moe[1:]):
         a.io.next = b
@@ -68,7 +70,7 @@ def load(pack_dir, *, slots=None, budget_gb=None, calibration=None, half_life=No
     mx.eval(model.parameters())
     n = sum(per.values())
     print(f"moeStream: {n} slots ({n * stride / GB:.2f} GB), per layer {min(per.values())}-{max(per.values())}, "
-          f"half-life {half_life:g}", file=sys.stderr)
+          f"half-life {half_life:g}, eviction {eviction}", file=sys.stderr)
     tok = None
     if (pack_dir / "tokenizer.json").exists():
         from mlx_lm.utils import load_tokenizer

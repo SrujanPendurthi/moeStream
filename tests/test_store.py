@@ -54,3 +54,30 @@ def test_assign_counts_weight_the_score():
     s.tick(); s.assign([0, 1], counts=[5, 1])  # a prefill chunk: 0 used by 5 tokens, 1 by one
     s.tick(); _, f = s.assign([2])
     assert f == [(2, 1)]
+
+
+def _victim(policy, uses):
+    """2 slots, no decay; returns the expert evicted to make room for expert 9."""
+    s = SlotStore(10, 2, half_life=float("inf"), policy=policy)
+    for e in uses:
+        s.tick(); s.assign([e])
+    before = dict(s.expert_slot)
+    s.tick(); s.assign([9])
+    return (set(before) - set(s.expert_slot)).pop()
+
+
+@pytest.mark.parametrize("policy, victim", [("lfu", 1), ("lru", 0), ("fifo", 0)])
+def test_frequent_but_stale_expert(policy, victim):
+    # 0 used three times then idle; 1 used once, most recently
+    assert _victim(policy, [0, 0, 0, 1]) == victim
+
+
+@pytest.mark.parametrize("policy, victim", [("lfu", 1), ("lru", 1), ("fifo", 0)])
+def test_oldest_load_recently_reused(policy, victim):
+    # 0 loaded first and used again last; 1 loaded second
+    assert _victim(policy, [0, 1, 0]) == victim
+
+
+def test_unknown_policy_raises():
+    with pytest.raises(ValueError, match="lifo"):
+        SlotStore(8, 2, policy="lifo")

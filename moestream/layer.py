@@ -24,7 +24,7 @@ EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of t
 class StreamingMoE(nn.Module):
     route = laguna.SparseMoeBlock.route
 
-    def __init__(self, args, layer, pack_dir, layout, slots, half_life, group_size, bits, dtype):
+    def __init__(self, args, layer, pack_dir, layout, slots, half_life, group_size, bits, dtype, policy="lfu"):
         super().__init__()
         h = args.hidden_size
         self.top_k = args.num_experts_per_tok
@@ -39,7 +39,7 @@ class StreamingMoE(nn.Module):
         # SimpleNamespace keeps slots and links out of the parameter tree (load_weights strict=True)
         self.io = SimpleNamespace(
             glu=glu, layout=layout, next=None, predictor=None, trace=None, guess=None,
-            store=SlotStore(args.num_experts, slots, half_life),
+            store=SlotStore(args.num_experts, slots, half_life, policy),
             prefetcher=Prefetcher(Path(pack_dir) / "experts" / f"layer_{layer:02d}.bin", layout["stride"],
                                   keep=2 * self.top_k),
             stats=dict(pred_hit=0, pred_total=0, sync_s=0.0, read_s=0.0, write_s=0.0),
