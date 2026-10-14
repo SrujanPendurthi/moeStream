@@ -15,7 +15,7 @@ def _write(tmp_path, text, name="engine.toml"):
 
 def test_shipped_file_reads_with_spec_defaults():
     c = EngineConfig.read(REPO / "moestream.toml")
-    assert c.memory_gb == 20.0 and c.context_tokens == 131072 and c.kv_bits == 8
+    assert c.memory_gb == 14.0 and c.context_tokens == 131072 and c.kv_bits == 8
     assert c.eviction == "lfu" and c.thinking is True and c.port == 8081
     assert Path(c.pack_dir) == (REPO / "../lagunaLab/models/Laguna-XS-2.1-packed")
     assert Path(c.calibration) == REPO / "budget.json"

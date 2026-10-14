@@ -1,6 +1,6 @@
 # moeStream engine settings. Relative paths resolve against this file.
 pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
-memory_gb = 20.0          # peak GPU memory the engine may use; omit to probe free memory
+memory_gb = 14.0          # peak GPU memory the engine may use; omit to probe free memory
 context_tokens = 131072   # longest session the KV reservation is sized for
 kv_bits = 8               # 8 = q8 (default), 4 = q4, 0 = bf16 (lossless)
 eviction = "lfu"          # lfu | lru | fifo
