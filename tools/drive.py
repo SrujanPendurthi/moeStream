@@ -20,9 +20,11 @@ def _wire(m):
     return {**m, "tool_calls": calls}
 
 
-def turns(msgs):
+def turns(msgs, max_chars=None):
+    """Each assistant turn's prefix; prefixes over max_chars (JSON) are skipped, so decode, not prefill, dominates."""
     msgs = [_wire(m) for m in msgs]
-    return [msgs[:i] for i, m in enumerate(msgs) if m["role"] == "assistant" and i]
+    out = [msgs[:i] for i, m in enumerate(msgs) if m["role"] == "assistant" and i]
+    return [t for t in out if max_chars is None or len(json.dumps(t)) <= max_chars]
 
 
 def main():
@@ -32,15 +34,17 @@ def main():
     p.add_argument("--traces", default="../lagunaLab/traces")
     p.add_argument("--url", default="http://127.0.0.1:8081/v1")
     p.add_argument("--minutes", type=float, default=60)
+    p.add_argument("--max-chars", type=int, default=32000, help="skip turns whose prefix is longer (about 8k tokens)")
+    p.add_argument("--max-tokens", type=int, default=1024)
     a = p.parse_args()
     end = time.time() + 60 * a.minutes
     while time.time() < end:
         for f in sorted(glob.glob(f"{a.traces}/*.jsonl")):
             msgs, tools = load_session(f)
-            for prefix in turns(msgs):
+            for prefix in turns(msgs, a.max_chars):
                 if time.time() >= end:
                     return
-                body = {"model": "Laguna-XS-2.1", "messages": prefix, "max_tokens": 256, "tools": tools}
+                body = {"model": "Laguna-XS-2.1", "messages": prefix, "max_tokens": a.max_tokens, "tools": tools}
                 req = urllib.request.Request(f"{a.url}/chat/completions", json.dumps(body).encode(),
                                              {"Content-Type": "application/json"})
                 try:
