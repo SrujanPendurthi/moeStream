@@ -7,10 +7,13 @@ Flags given on the command line override the ones derived from the config.
 """
 import json
 import sys
+import warnings
 from pathlib import Path
 
 from moestream.budget import kv_bytes_per_token
 from moestream.config import EngineConfig
+
+TUNER = []  # the running engine's tuner, once loaded
 
 
 def session_kv_bytes(cfg):
@@ -48,6 +51,12 @@ def make_loader(cfg):
                 if eid not in tok.eos_token_ids:
                     tok.add_eos_token(str(eid))
         loaded.append((model, tok))
+        try:
+            from moestream.tune import start
+
+            TUNER.append(start(model, tok, cfg))
+        except Exception as e:  # tuning never stops serving
+            warnings.warn(f"tuning off: {e!r}")
         return loaded[0]
 
     return _load
@@ -56,10 +65,20 @@ def make_loader(cfg):
 def patch_server(server, cfg):
     """Swap in the moeStream loader, and cap stored conversation caches at one session of KV.
     mlx-lm 0.31.3 builds LRUPromptCache without max_bytes; --prompt-cache-bytes alone is only
-    applied on its batched path, never on the single-request path quantized KV takes."""
+    applied on its batched path, never on the single-request path quantized KV takes. Also runs one
+    slice of tuner work whenever the generation thread polls an empty request queue."""
     lru = server.LRUPromptCache
     server.load = make_loader(cfg)
     server.LRUPromptCache = lambda max_size: lru(max_size, max_bytes=session_kv_bytes(cfg))
+    nxt = server.ResponseGenerator._next_request
+
+    def _next_request(self, timeout=None):
+        r = nxt(self, timeout)
+        if r is None and TUNER:
+            TUNER[0].idle()
+        return r
+
+    server.ResponseGenerator._next_request = _next_request
 
 
 def main():

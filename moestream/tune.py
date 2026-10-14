@@ -4,9 +4,12 @@ Runs on mlx-lm's generation thread: on_token() after each decode step, idle() wh
 is waiting. Replay trials run in up to 2 low-priority worker processes, so this module stays
 free of MLX imports.
 """
+import hashlib
 import json
+import os
 import time
 import warnings
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -271,3 +274,62 @@ class Tuner:
         for name, v in s.get("values", {}).items():
             if name in self.knobs and not self._set(name, v, disable=False):
                 warnings.warn(f"saved {name} dropped: it no longer applies")
+
+
+def fingerprint(cfg):
+    layout = (Path(cfg.pack_dir) / "layout.json").read_bytes()
+    return hashlib.sha256(layout + json.dumps([cfg.memory_gb, cfg.kv_bits, cfg.context_tokens]).encode()).hexdigest()[:16]
+
+
+def start(model, tok, cfg, prompts=None, probe_tokens=2048):
+    """Wire tuning into a loaded engine: knobs, routing traces, quality guard, pressure guard, saved state."""
+    from moestream.guard import Guard
+    from moestream.knobs import system_knobs
+    from moestream.layer import StreamingMoE, stream_stats
+    from moestream.pressure import Pressure
+    from tools.calibrate import GRID
+
+    moe = [(i, l.mlp) for i, l in enumerate(model.layers) if isinstance(l.mlp, StreamingMoE)]
+    E = moe[0][1].io.layout["num_experts"]
+    box = {}
+    knobs = system_knobs(model, sum(m.io.store.slots for _, m in moe),
+                         ready=lambda: not box["pressure"].shrunk)
+
+    def snapshot():
+        rows = {i: m.io.trace.rows() for i, m in moe}
+        if any(r is None or len(r) < 1024 for r in rows.values()):
+            return None
+        st = moe[0][1].io.store
+        return dict(rows=rows, slots={i: m.io.store.slots for i, m in moe}, policy=st.policy,
+                    half_life=st.half_life, num_experts=E, grid=[g for g in GRID if g <= E])
+
+    def counts():
+        s = stream_stats(model)
+        return s["hits"], s["misses"]
+
+    d, guard, pool = Path(cfg.tuning_dir), None, None
+    if cfg.tune:
+        for _, m in moe:
+            m.io.trace = Ring(cfg.trace_tokens)
+        if prompts is None:
+            from scripts.check_parity import PROMPTS
+            prompts = [tok.apply_chat_template([{"role": "user", "content": p}], add_generation_prompt=True)
+                       for p in PROMPTS]
+        layout = (Path(cfg.pack_dir) / "layout.json").read_bytes()
+        key = hashlib.sha256(layout + json.dumps([cfg.kv_bits, prompts, probe_tokens]).encode()).hexdigest()[:16]
+        guard = Guard(model, prompts, d / "reference.npz", key, total=probe_tokens)
+        pool = ProcessPoolExecutor(2, initializer=os.nice, initargs=(10,))
+    tuner = Tuner(knobs, snapshot, d, fingerprint(cfg), guard=guard, pool=pool, counts=counts, trial=cfg.tune)
+    box["pressure"] = Pressure(next(k for k in knobs if k.name == "slots"), min(16, E), log=tuner.log)
+    if guard is None or guard.ready:
+        tuner.load_state()  # else it waits for the untuned reference to be built (Tuner.idle)
+
+    def hook(decode):
+        if decode:
+            tuner.on_token()
+            box["pressure"].on_token()
+        else:
+            tuner.interrupt()
+
+    moe[-1][1].io.hook = hook
+    return tuner

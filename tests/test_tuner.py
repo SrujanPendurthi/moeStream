@@ -183,3 +183,34 @@ def test_stats_windows_are_logged(tmp_path):
         tuner.on_token()
     rec = json.loads((tmp_path / "log.jsonl").read_text().splitlines()[-1])
     assert rec["tok_s"] == pytest.approx(10.0) and rec["hit_rate"] == 0.75
+
+
+def test_start_wires_hooks_traces_and_resumes_state(tmp_path):
+    import mlx.core as mx
+
+    from moestream.config import EngineConfig
+    from moestream.layer import StreamingMoE
+    from moestream.load import load
+    from moestream.tune import Ring, start
+    from scripts.pack_experts import pack
+    from tests.tiny import quantized_model_dir
+
+    d, _ = quantized_model_dir(tmp_path)
+    pack(d, tmp_path / "packed")
+    m, _ = load(tmp_path / "packed", slots=4)
+    cfg = EngineConfig(pack_dir=str(tmp_path / "packed"), tuning_dir=str(tmp_path / "t"), tune=False, kv_bits=0)
+    tuner = start(m, None, cfg)
+    moe = [l.mlp for l in m.layers if isinstance(l.mlp, StreamingMoE)]
+    assert moe[-1].io.hook is not None and all(x.io.trace is None for x in moe)  # tune=false: no traces
+    tuner.knobs["policy"].apply("fifo")
+    tuner.save()
+    m2, _ = load(tmp_path / "packed", slots=4)
+    start(m2, None, cfg)
+    assert {l.mlp.io.store.policy for l in m2.layers if isinstance(l.mlp, StreamingMoE)} == {"fifo"}
+    cfg.tune = True
+    m3, _ = load(tmp_path / "packed", slots=4)
+    t3 = start(m3, None, cfg, prompts=[[1, 2, 3, 4]], probe_tokens=8)
+    assert isinstance(m3.layers[1].mlp.io.trace, Ring)
+    m3(mx.array([[1, 2, 3]]))
+    assert t3.tokens == 0  # prefill is not a decode token
+    t3.pool.shutdown()

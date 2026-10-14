@@ -45,13 +45,16 @@ def test_stored_prompt_caches_are_capped_at_one_session_of_kv():
 
     from tools.serve import patch_server
 
-    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None)
+    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None,
+                             ResponseGenerator=type("RG", (), {"_next_request": lambda self, timeout=None: None}))
     patch_server(server, EngineConfig(pack_dir="/p", kv_bits=8, context_tokens=1000))
     assert server.LRUPromptCache(6).max_bytes == 40960 * 136 // 256 * 1000
 
 
 def test_loader_loads_once_whatever_model_name_a_client_sends(monkeypatch):
     from types import SimpleNamespace
+
+    monkeypatch.setattr("moestream.tune.start", lambda *a, **k: None)
 
     from tools.serve import make_loader
 
@@ -61,3 +64,25 @@ def test_loader_loads_once_whatever_model_name_a_client_sends(monkeypatch):
     loader = make_loader(EngineConfig(pack_dir="/p"))
     first = loader("/p")
     assert loader("Laguna-XS-2.1") is first and len(calls) == 1
+
+
+def test_idle_polls_drive_the_tuner(monkeypatch):
+    from types import SimpleNamespace
+
+    from mlx_lm.models.cache import LRUPromptCache
+
+    import tools.serve as serve
+
+    class RG:
+        def _next_request(self, timeout=None):
+            return self.queued
+
+    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None, ResponseGenerator=RG)
+    serve.patch_server(server, EngineConfig(pack_dir="/p"))
+    idles = []
+    monkeypatch.setattr(serve, "TUNER", [SimpleNamespace(idle=lambda: idles.append(1))])
+    rg = RG()
+    rg.queued = None
+    assert rg._next_request(0.1) is None and idles == [1]
+    rg.queued = "req"
+    assert rg._next_request(0.1) == "req" and idles == [1]
