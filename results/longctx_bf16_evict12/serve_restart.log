@@ -1,0 +1,16 @@
+moeStream: release_evicted_caches on: caches the prompt cache drops are emptied
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/mlx_lm/server.py:1723: UserWarning: mlx_lm.server is not recommended for production as it only implements basic security checks.
+  warnings.warn(
+2026-10-15 07:31:13,444 - INFO - Starting httpd at 127.0.0.1 on port 8081...
+moeStream: 2528 slots (4.47 GB), per layer 48-96, half-life 64, eviction lfu, kv 16-bit
+[transformers] The tokenizer you are loading from '/Users/srujanpendurthi/Projects/Current/moeStream/../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+2026-10-15 07:31:14,789 - INFO - Prompt Cache: 0 sequences, 0.00 GB
+2026-10-15 07:31:14,789 - INFO - - assistant: 0 sequences, 0.00 GB
+2026-10-15 07:31:14,790 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-15 07:31:14,790 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 82074 tokens in 1.56 s (RAM had 0, 128 left to process)
+127.0.0.1 - - [15/Oct/2026 07:31:16] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-15 07:31:22,741 - INFO - Prompt processing progress: 127/128
+2026-10-15 07:31:24,119 - INFO - Prompt processing progress: 128/128
+tools/watch.sh: line 21: 58714 Terminated: 15          "$@"
+watch: peak swap 415 MB, peak footprint 14336 MB
