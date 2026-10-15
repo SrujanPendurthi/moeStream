@@ -315,3 +315,14 @@ def test_writing_past_the_cap_deletes_whole_chains_least_recently_used_first(tmp
     _turns(s, 0, [10, 20], base=3)
     assert sorted(s.chains) == sorted([chain[0], chain[2], *set(s.chains) - set(chain.values())])
     assert len(s.chains) == 3 and not (tmp_path / "kv" / chain[1]).exists()
+
+
+def test_a_snapshot_superseded_between_lookup_and_restore_keeps_the_chain(tmp_path, monkeypatch):
+    s = _store_with(tmp_path, monkeypatch, [10])
+    n, cid = s.lookup(list(range(30)), ram_prefix=0, context_tokens=1000)
+    cache = _make(0)
+    _grow(cache, 20, seed=1)
+    s.save(list(range(20)), cache)                     # the writer moves the chain on: sliding_10 goes
+    s.flush()
+    assert s.restore(cid, n, _make(0)) is False
+    assert cid in s.chains and s.chains[cid]["snapshots"][-1]["n"] == 20

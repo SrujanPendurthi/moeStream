@@ -241,9 +241,11 @@ class Store:
         """Fill `cache`, a fresh model.make_cache(), in place with chain cid at n tokens. Files are read
         one array at a time with F_NOCACHE (no page-cache copy) into one host buffer the size of the
         largest array. On any error: drop the chain and return False; the caller discards `cache`."""
+        d, m = self.dir / cid, self.chains.get(cid)
+        snap = next((x for x in (m or {}).get("snapshots", []) if x["n"] == n), None)
+        if snap is None:  # superseded by a newer turn since the lookup
+            return False
         try:
-            d, m = self.dir / cid, self.chains[cid]
-            snap = next(x for x in m["snapshots"] if x["n"] == n)
             files = [(d / g["file"], g["a"], min(g["b"], n)) for g in m["segments"] if g["a"] < n]
             heads = [(p, a, b, *_header(p)) for p, a, b in files + [(d / snap["file"], None, None)]]
             buf = memoryview(self.alloc(max(e["data_offsets"][1] - e["data_offsets"][0]
@@ -283,6 +285,9 @@ class Store:
             os.utime(d / "manifest.json")  # last use, for pruning
             return True
         except Exception as e:
+            if self.chains.get(cid) is not m:  # the writer moved the chain on mid-read: not a bad chain
+                log(f"restore of chain {cid} at {n} tokens raced a newer turn ({e!r})")
+                return False
             log(f"restore of chain {cid} at {n} tokens failed ({e!r}): dropping it")
             self._drop(cid)
             return False
@@ -326,10 +331,10 @@ class Store:
         except BaseException:
             shutil.rmtree(d, ignore_errors=True) if new else [(d / f).unlink(missing_ok=True) for f in written]
             raise
+        with self.cv:
+            self.chains[cid] = m2  # before deleting what m2 dropped, so a reader can tell it raced
         for f in set(_files(m)) - set(_files(m2)):
             (d / f).unlink(missing_ok=True)
-        with self.cv:
-            self.chains[cid] = m2
         self.prune()
 
     def prune(self):
