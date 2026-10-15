@@ -253,6 +253,7 @@ def test_each_request_logs_mlx_memory_when_asked(tmp_path, monkeypatch):
     assert rows[0]["prompt_tokens"] == len(T1) and rows[0]["reused"] == 0 and rows[1]["tokens"] == len(T1) + 3
     for r in rows:
         assert {"t", "active_gb", "cache_gb", "peak_gb"} <= set(r) and r["active_gb"] > 0
+    assert rows[1]["misses"] > 0 and "hits" in rows[1]   # cumulative expert hits/misses, for hit rate
 
 
 def test_a_tier_error_falls_back_to_a_normal_prefill_and_never_raises(tmp_path, monkeypatch):

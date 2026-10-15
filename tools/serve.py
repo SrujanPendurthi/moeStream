@@ -95,6 +95,11 @@ def patch_server(server, cfg):
 
         row = dict(event=event, t=round(time.time(), 2), **kw, active_gb=round(mx.get_active_memory() / 1e9, 3),
                    cache_gb=round(mx.get_cache_memory() / 1e9, 3), peak_gb=round(mx.get_peak_memory() / 1e9, 3))
+        if TIER:  # the served model; cumulative, so a request's hit rate is the difference of its two rows
+            from moestream.layer import stream_stats
+
+            st = stream_stats(TIER[0][1])
+            row.update(hits=st["hits"], misses=st["misses"])
         try:
             with open(memlog, "a") as f:
                 f.write(json.dumps(row) + "\n")

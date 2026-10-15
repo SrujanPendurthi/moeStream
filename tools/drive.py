@@ -51,18 +51,21 @@ def _text(m):
     return (m.get("reasoning") or "") + (m.get("content") or "") + (json.dumps(calls) if calls else "")
 
 
-def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_after=None, probe=None):
+def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_after=None, probe=None, start_back=None):
     """`rounds` turns of each unfinished session, interleaved. probe_after: after each turn, one greedy
     48-token continuation of the next prompt (a RAM hit), kept in that JSON file per session; probe:
     one greedy continuation per session, without turns. Probes never advance a conversation, but each
-    leaves the server a reply nothing continues, and the SSD tier keeps only two per chain."""
+    leaves the server a reply nothing continues, and the SSD tier keeps only two per chain.
+    start_back N: a new session starts at its N-th last assistant turn, with the recorded history
+    before it, so the first request is one long prompt (long-context runs)."""
     state, log = Path(state), Path(log)
     st = json.loads(state.read_text()) if state.exists() else {}
     rec = {f: _session(f) for f in files}
     for f in files:
         if f not in st:
             msgs = rec[f][0]
-            i = next(i for i, m in enumerate(msgs) if m["role"] == "assistant" and i)
+            starts = [i for i, m in enumerate(msgs) if m["role"] == "assistant" and i]
+            i = starts[-start_back] if start_back else starts[0]
             st[f] = {"history": msgs[:i], "next": i, "turn": 0}
 
     def ask(f, greedy):
@@ -131,10 +134,11 @@ def main():
     p.add_argument("--tag", default="live")
     p.add_argument("--probe-after")
     p.add_argument("--probe")
+    p.add_argument("--start-back", type=int, help="--live: start each new session at its N-th last assistant turn")
     a = p.parse_args()
     if a.live:
         files = [f"{a.traces}/{n}" for n in a.sessions.split(",")]
-        return live(a.live, files, a.rounds, a.url, a.log, a.tag, a.pause, a.max_tokens, a.probe_after, a.probe)
+        return live(a.live, files, a.rounds, a.url, a.log, a.tag, a.pause, a.max_tokens, a.probe_after, a.probe, a.start_back)
     end = time.time() + 60 * a.minutes
     while time.time() < end:
         for f in sorted(glob.glob(f"{a.traces}/*.jsonl")):

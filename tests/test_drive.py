@@ -90,3 +90,14 @@ def test_probe_text_ignores_the_servers_random_tool_call_ids():
     call = lambda i: {"role": "assistant", "content": "x", "tool_calls": [
         {"id": i, "type": "function", "function": {"name": "shell", "arguments": "{}"}}]}
     assert _text(call("05cef2f4")) == _text(call("14b478f7"))
+
+
+def test_start_back_begins_at_the_nth_last_assistant_turn_with_the_recorded_history(tmp_path, monkeypatch):
+    from tools.drive import live
+
+    sent = []
+    _fake(monkeypatch, sent)
+    live(tmp_path / "s.json", ["a"], rounds=5, url="u", log=tmp_path / "l", tag="long", pause=0, start_back=2)
+    assert [m["content"] for m in sent[0]["messages"]] == ["s", "u", "recorded 1", "t1"]
+    assert [m["content"] for m in sent[1]["messages"]] == ["s", "u", "recorded 1", "t1", "live 1", "t2"]
+    assert len(sent) == 2
