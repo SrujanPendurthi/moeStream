@@ -11,7 +11,8 @@ each prompt length, shortest first, prefills a fresh cache through mlx-lm's gene
 server does. Per point: MLX's peak over the active memory before it, MLX's pool after it, top's MEM
 for the process, expert bytes read, pageins, and prefill tok/s. Rows are written after each point,
 so a watchdog abort keeps what finished. The fit per step is peak - active = a + b * tokens, the
-activation term the budget reserves as a flat 1 GB today. --eval-groups sets layer.EVAL_GROUPS
+activation term the budget reserves as a flat 1 GB today. --eval-groups sets layer.EVAL_GROUPS,
+--prefill-set layer.PREFILL_SET
 (docs/prefill-memory.md).
 """
 import argparse
@@ -131,14 +132,15 @@ def main():
     p.add_argument("--ctx", default="5000,15000,30000")
     p.add_argument("--out", default="results/prefill_mem.json")
     p.add_argument("--eval-groups", action="store_true", help="diagnostic: layer.EVAL_GROUPS")
+    p.add_argument("--prefill-set", action="store_true", help="layer.PREFILL_SET: one group per layer in prefill")
     a = p.parse_args()
-    moestream.layer.EVAL_GROUPS = a.eval_groups
+    moestream.layer.EVAL_GROUPS, moestream.layer.PREFILL_SET = a.eval_groups, a.prefill_set
     cfg = EngineConfig.read(a.config)
     cap_buffer_pool(cfg.mlx_cache_gb)
     model, tok = load(cfg)
     text = Path("../lagunaLab/tests/reference/modeling_laguna.py").read_text()  # tools.bench's long prompt
     stride = json.loads((Path(cfg.pack_dir) / "layout.json").read_text())["stride"]
-    meta = {"memory_gb": cfg.memory_gb, "eval_groups": a.eval_groups,
+    meta = {"memory_gb": cfg.memory_gb, "eval_groups": a.eval_groups, "prefill_set": a.prefill_set,
             "slots_gb": sum(stream_stats(model)["slots"].values()) * stride / GB,
             "resident_gb": (Path(cfg.pack_dir) / "resident.safetensors").stat().st_size / GB}
     rows = sweep(model, tok.encode(text), [int(s) for s in a.steps.split(",")],
