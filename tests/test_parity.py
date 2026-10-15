@@ -171,3 +171,59 @@ def test_load_engine_skips_a_calibration_made_for_another_expert_count(tmp_path,
     c = seen["cfg"]
     assert (c.calibration is not None) == want_cal and c.kv_bits == 8 and c.lookahead is False
     assert c.memory_gb == 12.0 and c.context_tokens == 90000 and seen["pool"] == 1.0
+
+
+class _Tok:
+    def encode(self, text, add_special_tokens=False):
+        return [ord(c) for c in text]
+
+
+def _action_refs(tmp_path, actions):
+    import numpy as np
+
+    (tmp_path / "arefs").mkdir()
+    np.savez(tmp_path / "arefs" / "s1.npz", ids=np.arange(50, dtype=np.int32), action_starts=np.arange(len(actions)) + 10,
+             actions=json.dumps(actions), max_new=64)
+
+
+import json  # noqa: E402
+
+
+def test_action_rows_record_match_tool_validity_and_kind(tmp_path):
+    from tools.parity import action_rows, action_gate
+
+    shell = _call("shell", cmd="ls")
+    refs = [shell, shell, shell, _call("read", path="/a")]
+    got = [shell, _call("shell", cmd="ls -la"), _call("read", path="/a"), "<tool_call>read<arg_key>path"]
+    _action_refs(tmp_path, refs)
+    rows, summary = action_rows(None, _Tok(), tmp_path / "arefs", ["s1"], tools={"s1": TOOLS},
+                                greedy=lambda m, t, ids, starts, n: got,
+                                classifier=lambda m, prefix, r, g: "tie")
+    assert [r["exact"] for r in rows] == [True, False, False, False]
+    assert [r["same_tool"] for r in rows] == [True, True, False, True]
+    assert [r["kind"] for r in rows] == ["exact", "tie", "tie", "tie"]
+    assert rows[3]["calls_valid"] == 0 and rows[0]["calls_valid"] == 1
+    assert summary["n"] == 4 and summary["exact"] == 1 and summary["same_tool"] == 3
+    assert summary["calls_total"] == 4 and summary["calls_valid"] == 3
+    assert not action_gate(summary, n=4)                           # an invalid call fails the gate
+
+
+def test_the_action_gate(tmp_path):
+    from tools.parity import action_gate
+
+    base = {"n": 20, "exact": 14, "same_tool": 19, "real_mismatches": 0, "calls_total": 20, "calls_valid": 20}
+    assert action_gate(base, n=20)
+    assert not action_gate({**base, "exact": 13}, n=20)
+    assert not action_gate({**base, "same_tool": 18}, n=20)
+    assert not action_gate({**base, "real_mismatches": 1}, n=20)
+
+
+def test_self_references_are_saved_and_read_back_for_a0(tmp_path):
+    from tools.parity import action_rows, build_self_refs, load_self_refs
+
+    _action_refs(tmp_path, [_call("shell", cmd="ls")] * 2)
+    greedy = lambda m, t, ids, starts, n: [_call("shell", cmd=f"ls {i}") for i, _ in enumerate(starts)]
+    build_self_refs(None, _Tok(), tmp_path / "arefs", ["s1"], tmp_path / "self", greedy=greedy)
+    refs = load_self_refs(tmp_path / "arefs", ["s1"], tmp_path / "self")
+    rows, summary = action_rows(None, _Tok(), None, ["s1"], tools={"s1": TOOLS}, greedy=greedy, refs=refs)
+    assert summary["exact"] == 2 and [r["start"] for r in rows] == [10, 11]

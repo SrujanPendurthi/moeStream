@@ -156,3 +156,85 @@ def load_engine(pack, kv_bits, memory_gb, context_tokens, calibration="budget.js
     return moestream.load.load(EngineConfig(pack_dir=str(pack), memory_gb=memory_gb, kv_bits=kv_bits,
                                             context_tokens=context_tokens, calibration=cal, lookahead=False,
                                             mlx_cache_gb=mlx_cache_gb))
+
+
+def _tool(a):
+    from scripts.diag_actions import tool  # lagunaLab's same-tool rule, read-only
+
+    return tool(a)
+
+
+def action_rows(model, tok, refs_dir, sessions, tools, greedy=None, classifier=None, refs=None):
+    """Greedy actions at each reference start, against the reference's strings: exact, same tool,
+    common prefix, validity of every generated tool call, and for mismatches "tie" or "real".
+    tools: {session: the session's tool schemas}. refs: {session: (ids, starts, actions, max_new)}
+    instead of the .npz files (A0's self-references)."""
+    import os
+    from pathlib import Path
+
+    import numpy as np
+
+    if greedy is None:
+        from replay.replay import greedy_actions as greedy
+    classifier = classifier or classify
+    rows = []
+    for s in sessions:
+        if refs and s in refs:
+            ids, starts, want, max_new = refs[s]
+        else:
+            r = np.load(Path(refs_dir) / f"{s}.npz")
+            ids, starts, want, max_new = r["ids"], r["action_starts"], json.loads(str(r["actions"])), int(r["max_new"])
+        got = greedy(model, tok, ids, starts, max_new)
+        for st, w, g in zip([int(x) for x in starts], want, got):
+            calls = parse_calls(g)
+            checks = [valid_call(c, tools[s]) for c in calls]
+            kind = "exact" if w == g else classifier(model, list(ids[:st]), tok.encode(w, add_special_tokens=False),
+                                                     tok.encode(g, add_special_tokens=False))
+            wc, gc = parse_calls(w), calls
+            same_args = bool(wc and gc and wc[0] and gc[0] and set(wc[0][1]) == set(gc[0][1]))
+            rows.append({"session": s, "start": st, "exact": w == g, "same_tool": _tool(w) == _tool(g),
+                         "same_arg_keys": same_args, "common_prefix": len(os.path.commonprefix([w, g])),
+                         "calls_total": len(calls), "calls_valid": sum(ok for ok, _ in checks),
+                         "invalid": [why for ok, why in checks if not ok], "kind": kind, "ref": w, "got": g})
+            print(s, st, rows[-1]["exact"], rows[-1]["same_tool"], kind, flush=True)
+    summary = {"n": len(rows), "exact": sum(r["exact"] for r in rows), "same_tool": sum(r["same_tool"] for r in rows),
+               "calls_total": sum(r["calls_total"] for r in rows), "calls_valid": sum(r["calls_valid"] for r in rows),
+               "real_mismatches": sum(r["kind"] == "real" and not (r["same_tool"] and r["same_arg_keys"]) for r in rows),
+               "ties": sum(r["kind"] == "tie" for r in rows)}
+    return rows, summary
+
+
+def action_gate(summary, n=20, exact=14, same_tool=19):
+    """A1's gate, scaled to n actions: same tool >= 19/20, exact >= 14/20, no real mismatch in a tool
+    name or argument keys, every generated tool call valid."""
+    return (summary["same_tool"] >= same_tool * n / 20 and summary["exact"] >= exact * n / 20
+            and summary["real_mismatches"] == 0 and summary["calls_valid"] == summary["calls_total"])
+
+
+def build_self_refs(model, tok, refs_dir, sessions, out_dir, greedy=None):
+    """A0: the engine's own greedy actions at the reference starts, one JSON per session."""
+    from pathlib import Path
+
+    import numpy as np
+
+    if greedy is None:
+        from replay.replay import greedy_actions as greedy
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    for s in sessions:
+        r = np.load(Path(refs_dir) / f"{s}.npz")
+        acts = greedy(model, tok, r["ids"], r["action_starts"], int(r["max_new"]))
+        (Path(out_dir) / f"{s}.json").write_text(json.dumps({"actions": acts}))
+
+
+def load_self_refs(refs_dir, sessions, self_dir):
+    """{session: (ids, starts, actions, max_new)}: the reference's prompts with the engine's own actions."""
+    from pathlib import Path
+
+    import numpy as np
+
+    out = {}
+    for s in sessions:
+        r = np.load(Path(refs_dir) / f"{s}.npz")
+        acts = json.loads((Path(self_dir) / f"{s}.json").read_text())["actions"]
+        out[s] = (r["ids"], r["action_starts"], acts, int(r["max_new"]))
+    return out
