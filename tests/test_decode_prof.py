@@ -33,3 +33,28 @@ def test_instrumented_decode_gives_the_same_tokens_and_a_split_that_adds_up(tmp_
     assert abs(sum(timed[k] for k in parts) - timed["ms_per_tok"]) < 1e-6
     assert {"sync_ms", "read_ms", "write_ms", "hit_rate"} <= set(timed)
     assert model.layers[1].__class__.__name__ != "Timed"          # wrappers removed afterwards
+
+
+def test_no_prefetch_turns_lookahead_off_on_every_streamed_layer(tmp_path):
+    from moestream.layer import StreamingMoE
+    from tools.decode_prof import no_prefetch
+
+    model = _model(tmp_path)
+    moe = [l.mlp for l in model.layers if isinstance(l.mlp, StreamingMoE)]
+    assert any(m.io.next is not None for m in moe)
+    no_prefetch(model)
+    assert all(m.io.next is None for m in moe)
+
+
+def test_decode_takes_the_engine_stats_function(tmp_path):
+    from tools.decode_prof import decode
+
+    model = _model(tmp_path)
+    cache, t = _prefill(model)
+    calls = []
+
+    def stats(m):
+        calls.append(1)
+        return {"hits": 3 * len(calls), "misses": len(calls)}
+    row = decode(model, cache, t, 2, model.args.layer_types, instrument=False, stats=stats)
+    assert row["hit_rate"] == 0.75 and len(calls) == 2

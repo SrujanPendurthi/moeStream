@@ -39,9 +39,18 @@ class Timed:
         return getattr(self.inner, name)
 
 
-def decode(model, cache, token, n, layer_types, instrument):
-    """n greedy decode steps from token. Returns tokens, ms_per_tok, and with instrument the split (ms per token)."""
-    from moestream.layer import stream_stats
+def no_prefetch(model):
+    """Lookahead off on every streamed layer (no next-layer router run, no speculative reads)."""
+    for l in model.layers:
+        if hasattr(l.mlp, "io"):
+            l.mlp.io.next = None
+
+
+def decode(model, cache, token, n, layer_types, instrument, stats=None):
+    """n greedy decode steps from token. Returns tokens, ms_per_tok, and with instrument the split
+    (ms per token). stats(model) -> hits/misses (and sync_s/read_s/write_s when the engine has them)."""
+    if stats is None:
+        from moestream.layer import stream_stats as stats
 
     layers = model.layers
     acc = {"attn_full": 0.0, "attn_sliding": 0.0, "layer": 0.0}
@@ -50,7 +59,7 @@ def decode(model, cache, token, n, layer_types, instrument):
         for i, (l, lt) in enumerate(zip(saved, layer_types)):
             l.self_attn = Timed(l.self_attn, acc, "attn_full" if lt == "full_attention" else "attn_sliding")
             layers[i] = Timed(l, acc, "layer")
-    s0 = stream_stats(model)
+    s0 = stats(model)
     out, t = [], token
     t0 = time.perf_counter()
     try:
@@ -63,13 +72,14 @@ def decode(model, cache, token, n, layer_types, instrument):
         for l in saved:
             if isinstance(l.self_attn, Timed):
                 l.self_attn = l.self_attn.inner
-    s1 = stream_stats(model)
+    s1 = stats(model)
     ms = 1000 / n
     row = {"tokens": out, "ms_per_tok": secs * ms, "tok_s": n / secs}
-    d = {k: s1[k] - s0[k] for k in ("hits", "misses", "sync_s", "read_s", "write_s")}
+    d = {k: s1[k] - s0[k] for k in ("hits", "misses", "sync_s", "read_s", "write_s") if k in s1}
     row["hit_rate"] = d["hits"] / max(1, d["hits"] + d["misses"])
     for k in ("sync", "read", "write"):
-        row[f"{k}_ms"] = d[f"{k}_s"] * ms
+        if f"{k}_s" in d:
+            row[f"{k}_ms"] = d[f"{k}_s"] * ms
     if instrument:  # a layer's wall time holds its attention's; the rest of the layer is the MLP/MoE
         row["attn_full_ms"] = acc["attn_full"] * ms
         row["attn_sliding_ms"] = acc["attn_sliding"] * ms
@@ -101,6 +111,9 @@ def main():
     p.add_argument("--slots", type=int, default=64)
     p.add_argument("--kv-bits", default="8", help="one value; see the module docstring")
     p.add_argument("--out", default="results/decode_prof.json")
+    p.add_argument("--engine", choices=("moestream", "laguna"), default="moestream",
+                   help="laguna: lagunaLab's load_streaming(slots, cache_limit_gb=mlx_cache_gb), plain bf16 cache")
+    p.add_argument("--no-prefetch", action="store_true", help="moestream: lookahead off")
     a = p.parse_args()
     cfg = EngineConfig.read(a.config)
     cap_buffer_pool(cfg.mlx_cache_gb)
@@ -108,17 +121,26 @@ def main():
     rows = []
     for bits in (int(b) for b in a.kv_bits.split(",")):
         mx.reset_peak_memory()
-        model, tok = load(cfg.pack_dir, slots=a.slots, calibration=cfg.calibration, kv_bits=bits,
-                          eviction=cfg.eviction, target_ctx=2 * cfg.context_tokens)
+        if a.engine == "laguna":
+            from laguna_mlx.streaming import load_streaming
+            from laguna_mlx.streaming import stream_stats as stats
+
+            model, tok = load_streaming(cfg.pack_dir, a.slots, cache_limit_gb=cfg.mlx_cache_gb)
+        else:
+            stats = stream_stats
+            model, tok = load(cfg.pack_dir, slots=a.slots, calibration=cfg.calibration, kv_bits=bits,
+                              eviction=cfg.eviction, target_ctx=2 * cfg.context_tokens)
+            if a.no_prefetch:
+                no_prefetch(model)
         base = tok.encode(text)
         ids = (base * (a.ctx // len(base) + 1))[: a.ctx]
         lt = model.args.layer_types
         cache, t, pf = prefill(model, ids)
-        plain = decode(model, cache, t, a.tokens, lt, instrument=False)
+        plain = decode(model, cache, t, a.tokens, lt, instrument=False, stats=stats)
         cache, t, _ = prefill(model, ids)
-        timed = decode(model, cache, t, a.tokens, lt, instrument=True)
-        row = {"kv_bits": bits, "ctx": a.ctx, "slots_per_layer": a.slots,
-               "slots_total": sum(stream_stats(model)["slots"].values()), "prefill_tok_s": pf,
+        timed = decode(model, cache, t, a.tokens, lt, instrument=True, stats=stats)
+        row = {"engine": a.engine, "no_prefetch": a.no_prefetch, "kv_bits": 0 if a.engine == "laguna" else bits,
+               "ctx": a.ctx, "slots_per_layer": a.slots, "prefill_tok_s": pf,
                "plain": {k: v for k, v in plain.items() if k != "tokens"},
                "instrumented": {k: v for k, v in timed.items() if k != "tokens"},
                "same_tokens": plain["tokens"] == timed["tokens"], "peak_gb": mx.get_peak_memory() / GB}
