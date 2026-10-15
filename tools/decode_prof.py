@@ -1,9 +1,10 @@
 """Decode profile at long context: where a decode step's time goes, per KV width, slots held fixed.
 
 usage: PYTHONPATH=.:../lagunaLab python3 -m tools.decode_prof --config results/decode_prof.toml
-           [--ctx 32000] [--tokens 64] [--slots 64] [--kv-bits 8,0] [--out results/decode_prof.json]
+           [--ctx 32000] [--tokens 64] [--slots 64] [--kv-bits 8] [--out results/decode_prof.json]
 
-For each kv_bits, in one process: load with the same slots on every layer (so the KV width does not
+Run one kv_bits per process: a second load in the same process ran under memory pressure (the first
+model was not freed; results/decode_prof.json, kv_bits 0 row). For that kv_bits: load with the same slots on every layer (so the KV width does not
 change the slot count), prefill --ctx tokens (step 2048, as the server), then decode greedily twice
 from the same prefix: once plain (the real tok/s) and once instrumented, with an mx.eval after every
 attention and every layer, which splits a step into full-attention, sliding-attention, MoE (with its
@@ -98,7 +99,7 @@ def main():
     p.add_argument("--ctx", type=int, default=32000)
     p.add_argument("--tokens", type=int, default=64)
     p.add_argument("--slots", type=int, default=64)
-    p.add_argument("--kv-bits", default="8,0")
+    p.add_argument("--kv-bits", default="8", help="one value; see the module docstring")
     p.add_argument("--out", default="results/decode_prof.json")
     a = p.parse_args()
     cfg = EngineConfig.read(a.config)
