@@ -6,6 +6,7 @@ Loads real weights: run it as
 Flags given on the command line override the ones derived from the config.
 """
 import json
+import os
 import sys
 import time
 import warnings
@@ -131,8 +132,21 @@ def patch_server(server, cfg):
     server.ResponseGenerator._next_request = _next_request
 
 
+def shared_machine():
+    """No wired limit (mlx-lm sets one at start and around every generation) and MLX's free-buffer
+    pool capped at 1 GB, so the footprint stays near memory_gb while the machine is in use
+    (lagunaLab a1ca51e: the pool inflated the footprint past its watchdog)."""
+    import mlx.core as mx
+
+    mx.set_cache_limit(1 << 30)
+    mx.set_wired_limit = lambda limit: 0
+
+
 def main():
     import mlx_lm.server as server
+
+    if os.environ.get("MOESTREAM_SHARED") == "1":
+        shared_machine()
 
     import scripts.serve_streaming  # noqa: F401  installs lagunaLab's SSE keepalive filter on the handler
 

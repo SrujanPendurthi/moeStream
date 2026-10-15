@@ -215,3 +215,16 @@ def test_a_restore_error_falls_back_to_a_full_prefill(tmp_path, monkeypatch):
     t2 = T1 + out + T2[30:]
     assert _turn(model, LRU(6), t2)[0] == len(t2)   # the chain is dropped: a full prefill
     assert torn not in store.chains and not (tmp_path / "kv" / torn).exists()
+
+
+def test_shared_machine_mode_drops_the_wired_limit_and_caps_the_buffer_pool(monkeypatch):
+    import mlx.core as mx
+
+    import tools.serve as serve
+
+    limits = []
+    monkeypatch.setattr(mx, "set_cache_limit", lambda n: limits.append(n) or 0)
+    monkeypatch.setattr(mx, "set_wired_limit", lambda n: limits.append(("wired", n)) or 0)
+    serve.shared_machine()
+    mx.set_wired_limit(1 << 34)                       # what mlx-lm does at start and per generation
+    assert limits == [1 << 30]
