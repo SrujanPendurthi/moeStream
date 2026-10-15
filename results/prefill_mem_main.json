@@ -1,0 +1,81 @@
+{
+ "memory_gb": 10.0,
+ "eval_groups": false,
+ "prefill_set": false,
+ "slots_gb": 6.398410752,
+ "resident_gb": 1.155702633,
+ "active_after_warmup_gb": 7.554992996,
+ "warmup_filled": true,
+ "rows": [
+  {
+   "step": 2048,
+   "tokens": 5000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.527328396,
+   "transient_gb": 1.973361536,
+   "prefill_tok_s": 81.45125585102151,
+   "top_mb": 11264,
+   "cache_gb": 1.06863002,
+   "bytes_read": 47867756544,
+   "pageins": 2494240
+  },
+  {
+   "step": 2048,
+   "tokens": 15000,
+   "active_gb": 7.55396686,
+   "peak_gb": 11.692725588,
+   "transient_gb": 4.138758728,
+   "prefill_tok_s": 82.00999269755472,
+   "top_mb": 13312,
+   "cache_gb": 1.065332522,
+   "bytes_read": 125048586240,
+   "pageins": 6534753
+  },
+  {
+   "step": 2048,
+   "tokens": 30000,
+   "active_gb": 7.55396686,
+   "peak_gb": 14.538230126,
+   "transient_gb": 6.984263266,
+   "prefill_tok_s": 72.38315590000674,
+   "top_mb": 16384,
+   "cache_gb": 1.046207276,
+   "bytes_read": 231034650624,
+   "pageins": 12086992
+  },
+  {
+   "step": 1024,
+   "tokens": 5000,
+   "active_gb": 7.55396686,
+   "peak_gb": 10.202890892,
+   "transient_gb": 2.648924032,
+   "prefill_tok_s": 74.58246860156144,
+   "top_mb": 12288,
+   "cache_gb": 1.068646404,
+   "bytes_read": 76934873088,
+   "pageins": 3997163
+  },
+  {
+   "step": 1024,
+   "tokens": 15000,
+   "active_gb": 7.55396686,
+   "peak_gb": 14.076204372,
+   "transient_gb": 6.522237512,
+   "prefill_tok_s": 67.22065121118251,
+   "top_mb": 16384,
+   "cache_gb": 1.065332522,
+   "bytes_read": 224386744320,
+   "pageins": 11730126
+  }
+ ],
+ "fit": {
+  "1024": {
+   "gb": 0.7122672919999999,
+   "gb_per_1k_tokens": 0.387331348
+  },
+  "2048": {
+   "gb": 1.0389860321052633,
+   "gb_per_1k_tokens": 0.1995885086736842
+  }
+ }
+}
