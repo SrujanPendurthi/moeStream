@@ -1,0 +1,9 @@
+pack_dir = "/Users/srujanpendurthi/Projects/Current/lagunaLab/models/Laguna-XS-2.1-packed"
+memory_gb = 14.0
+context_tokens = 32768
+kv_bits = 8
+calibration = "/Users/srujanpendurthi/Projects/Current/moeStream/budget.json"
+thinking = false
+tune = false
+kv_tier = false
+mlx_cache_gb = 1.0
