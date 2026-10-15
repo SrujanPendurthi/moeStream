@@ -342,3 +342,23 @@ def test_a_snapshot_superseded_between_lookup_and_restore_keeps_the_chain(tmp_pa
         s.flush()
     assert s.restore(cid, n, _make(0)) is False
     assert cid in s.chains and s.chains[cid]["snapshots"][-1]["n"] == 30
+
+
+def test_a_crash_while_creating_format_leaves_a_directory_the_tier_still_owns(tmp_path):
+    (tmp_path / "kv").mkdir()
+    (tmp_path / "kv" / "FORMAT.tmp").write_text("v1 half")  # kill -9 before the rename
+    assert Store(tmp_path / "kv", FP).chains == {}
+    assert (tmp_path / "kv" / "FORMAT").read_text() == FP
+
+
+def test_a_crash_mid_wipe_keeps_the_old_format_so_the_next_start_wipes_again(tmp_path, monkeypatch):
+    Store(tmp_path / "kv", FP)
+    _chain(tmp_path / "kv", "c1", GOOD)
+    real = kvtier.write_atomic
+    monkeypatch.setattr(kvtier, "write_atomic", lambda *a: (_ for _ in ()).throw(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        Store(tmp_path / "kv", "v1 test kv0")
+    assert (tmp_path / "kv" / "FORMAT").read_text() == FP
+    monkeypatch.setattr(kvtier, "write_atomic", real)
+    s = Store(tmp_path / "kv", "v1 test kv0")
+    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]

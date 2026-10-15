@@ -95,8 +95,11 @@ def patch_server(server, cfg):
 
         row = dict(event=event, t=round(time.time(), 2), **kw, active_gb=round(mx.get_active_memory() / 1e9, 3),
                    cache_gb=round(mx.get_cache_memory() / 1e9, 3), peak_gb=round(mx.get_peak_memory() / 1e9, 3))
-        with open(memlog, "a") as f:
-            f.write(json.dumps(row) + "\n")
+        try:
+            with open(memlog, "a") as f:
+                f.write(json.dumps(row) + "\n")
+        except OSError as e:
+            warnings.warn(f"memlog: {e!r}")
         if event == "fetch":
             mx.reset_peak_memory()
 
@@ -112,6 +115,16 @@ def patch_server(server, cfg):
             return cache, rest
 
         def _fetch(self, model, tokens):
+            # mlx-lm's batched path (kv_bits 0) calls this outside any try: a tier error must not
+            # end its generation thread, so it falls back to the RAM cache and a normal prefill
+            try:
+                hit = self._tier_fetch(model, tokens)
+            except Exception as e:
+                warnings.warn(f"kv tier fetch failed, prefilling normally: {e!r}")
+                hit = None
+            return hit or super().fetch_nearest_cache(model, tokens)
+
+        def _tier_fetch(self, model, tokens):
             if TIER:
                 store, m = TIER[0]
                 # RAM match length without mlx-lm's deep copy, so a restore never sits beside one.
@@ -129,13 +142,16 @@ def patch_server(server, cfg):
                         log(f"restored {hit[0]} tokens in {time.perf_counter() - t:.2f} s "
                             f"(RAM had {ram}, {len(tokens) - hit[0]} left to process)")
                         return cache, tokens[hit[0]:]
-            return super().fetch_nearest_cache(model, tokens)
+            return None
 
         def insert_cache(self, model, tokens, prompt_cache, *, cache_type="assistant"):
             super().insert_cache(model, tokens, prompt_cache, cache_type=cache_type)
             mem("insert", tokens=len(tokens), cache_type=cache_type)
             if TIER and cache_type == "assistant":  # turn ends only; mid-prompt segments are not restorable points
-                TIER[0][0].save(tokens, prompt_cache)
+                try:
+                    TIER[0][0].save(tokens, prompt_cache)
+                except Exception as e:  # same: never into mlx-lm's generation thread
+                    warnings.warn(f"kv tier save failed: {e!r}")
 
     server.LRUPromptCache = PromptCache
     nxt = server.ResponseGenerator._next_request

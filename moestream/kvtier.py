@@ -163,13 +163,15 @@ class Store:
         self.dir.mkdir(parents=True, exist_ok=True)
         fmt = self.dir / "FORMAT"
         if not fmt.exists():
-            if any(self.dir.iterdir()):  # never wipe a directory this tier did not create
+            # never wipe a directory this tier did not create; FORMAT.tmp alone is a crash mid-create
+            if any(f.name != "FORMAT.tmp" for f in self.dir.iterdir()):
                 raise ValueError(f"{self.dir} is not empty and has no FORMAT file: not a kv tier directory")
             write_atomic(fmt, lambda f: f.write(fingerprint.encode()))
         elif fmt.read_text() != fingerprint:
             log(f"format, pack or kv_bits changed ({fmt.read_text()} -> {fingerprint}): wiping {self.dir}")
-            shutil.rmtree(self.dir)
-            self.dir.mkdir()
+            for d in self.dir.iterdir():  # the old FORMAT goes last, so a crash here wipes again next start
+                if d.name != "FORMAT":
+                    shutil.rmtree(d) if d.is_dir() else d.unlink()
             write_atomic(fmt, lambda f: f.write(fingerprint.encode()))
         self.chains = {}
         for d in sorted(self.dir.iterdir()):

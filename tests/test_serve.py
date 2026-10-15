@@ -253,3 +253,25 @@ def test_each_request_logs_mlx_memory_when_asked(tmp_path, monkeypatch):
     assert rows[0]["prompt_tokens"] == len(T1) and rows[0]["reused"] == 0 and rows[1]["tokens"] == len(T1) + 3
     for r in rows:
         assert {"t", "active_gb", "cache_gb", "peak_gb"} <= set(r) and r["active_gb"] > 0
+
+
+def test_a_tier_error_falls_back_to_a_normal_prefill_and_never_raises(tmp_path, monkeypatch):
+    import tools.serve as serve
+
+    monkeypatch.setenv("MOESTREAM_MEMLOG", str(tmp_path / "no" / "such" / "dir" / "mem.log"))
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    store = serve.TIER[0][0]
+
+    def boom(*a, **k):
+        raise KeyError("dtype")
+
+    monkeypatch.setattr(store, "lookup", boom)
+    monkeypatch.setattr(store, "save", boom)
+    assert _turn(model, LRU(6), T1)[0] == len(T1)   # fetch, prefill, insert: no exception
+
+
+def test_the_check_script_keeps_its_cache_under_its_results_dir():
+    from pathlib import Path
+
+    s = Path("tools/kvtier_check.sh").read_text()
+    assert 'KV=$(cd "$OUT" && pwd)/kvcache' in s and "KV=$REPO/kvcache" not in s

@@ -24,8 +24,8 @@ SERVE=${SERVE:-"/Users/srujanpendurthi/Projects/Current/.gpu/gpu-run moe tools/w
 PAUSE=${PAUSE:-5}
 MEM=${MEM:-14.0}
 SESSIONS=astropy__astropy-12907.jsonl,django__django-10924.jsonl,astropy__astropy-6938.jsonl
-KV=$REPO/kvcache
 mkdir -p "$OUT"
+KV=$(cd "$OUT" && pwd)/kvcache  # absolute, and never the server's own kvcache/: phase on wipes it
 export PYTHONPATH=.:../lagunaLab MOESTREAM_SHARED=1 MOESTREAM_MEMLOG=$OUT/mem.log
 
 for tier in false true; do
