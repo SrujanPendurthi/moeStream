@@ -166,3 +166,33 @@ footprint ~14 GB at `memory_gb = 12`; so `memory_gb = 14` (slots ~6.5 GB) should
 17 GB watchdog. At 128k, KV is 5.4 GB per copy: rest ~1.16 + 6.5 + 5.4 = 13.1 GB, peak ~18.5 GB:
 does not fit at `memory_gb = 14` with bf16 unless the transient copy goes too; q8 at 128k
 (2.85 GB per copy) would, with room.
+
+## Fourth 81k run: the writer fix, and what still holds a copy (2026-10-15, `results/longctx_bf16_fix12/`)
+
+Same config as run 2 (bf16, lookahead off, 1 session, `memory_gb = 12`) with the tier writer fix
+(c8f5b72). The restart phase's server also ran the live-KV inventory in the memory log (5d5ea61);
+the long phase did not, so the run mixes two code versions.
+
+| | run 2 (no fix) | run 4 (writer fix) |
+|---|---|---|
+| MLX peak | 15.81 GB | **14.31 GB** |
+| peaks at the end of each turn | 15.73, 15.81 | gone (12.75-12.85) |
+| active at the next request's start | 12.4 GB | 12.4 GB |
+| active at the next prompt's end | 12.4 GB | **9.03-9.06 GB** |
+| footprint / swap | 15.0 / 0.46 GB | 15.0 / 0.45 GB |
+
+The fix removed the end-of-turn peaks: the pinned snapshot had kept the old buffer alive while the
+cache grew. One copy still lives from the end of a turn to the next request's prefill. The live-KV
+inventory at the restart turn's end shows 20 full-attention `KVCache` objects (6.75 GB): the
+prompt cache's one entry plus another full set. That set is the cache `fetch_nearest_cache` returned:
+on mlx-lm's batched path the server merges it into a `BatchKVCache` (a copy) but keeps its local
+`cache` bound until the next request's fetch. With a restore it is the restored cache; with a RAM
+hit, the deep copy. So at 81k bf16, a turn holds ~2 KV copies (and briefly 3 at the next fetch's
+deep copy: the 14.3 GB peaks).
+
+**Not done, proposed:** release the fetched cache's arrays once mlx-lm has merged it (wrap
+`BatchKVCache.merge` in `patch_server` to empty the source caches; safe because the batched path
+never reads them after the merge and the prompt cache holds its own copy). Expected: ~9.1 GB at rest
+and ~12.4 GB peak at 81k bf16, which would let `memory_gb = 14` fit. q8 takes the single path,
+which merges nothing, so it is unaffected. The `memory_gb = 14` run was not done: its condition
+(peak <= 13 GB) was not met.
