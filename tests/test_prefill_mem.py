@@ -40,3 +40,37 @@ def test_sweep_warms_up_before_the_first_measured_point(tmp_path):
     assert m.calls[:2] == [128, 127]                     # warm-up prefill, not recorded
     assert [(r["step"], r["tokens"]) for r in rows] == [(128, 500)]
     assert (tmp_path / "out.json").exists()
+
+
+def test_steps_run_largest_first_whatever_the_order_given(tmp_path):
+    from tools.prefill_mem import sweep
+
+    rows = sweep(Fake(), list(range(300)), [128, 512, 256], [600], tmp_path / "o.json", warmup=64)
+    assert [r["step"] for r in rows] == [512, 256, 128]
+
+
+def test_each_point_logs_bytes_read_pageins_and_mlx_cache(tmp_path):
+    from tools.prefill_mem import sweep
+
+    reads = iter([10, 30])                          # misses before and after the one point
+    pageins = iter([100, 175])
+    rows = sweep(Fake(), list(range(300)), [128], [500], tmp_path / "o.json", warmup=64,
+                 misses=lambda: next(reads), pageins=lambda: next(pageins), stride=1000)
+    assert rows[0]["bytes_read"] == 20 * 1000 and rows[0]["pageins"] == 75 and "cache_gb" in rows[0]
+
+
+def test_parse_pageins():
+    from tools.prefill_mem import parse_pageins
+
+    assert parse_pageins("Pages free: 5.\nPageins:                    731780760.\n") == 731780760
+
+
+def test_warmup_check_compares_active_with_slots_plus_resident(tmp_path):
+    import json
+
+    from tools.prefill_mem import sweep
+
+    sweep(Fake(), list(range(300)), [128], [500], tmp_path / "o.json", warmup=64,
+          meta={"slots_gb": 0.0, "resident_gb": 0.0})
+    meta = json.loads((tmp_path / "o.json").read_text())
+    assert "active_after_warmup_gb" in meta and meta["warmup_filled"] in (True, False)

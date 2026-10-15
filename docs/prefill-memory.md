@@ -94,6 +94,10 @@ other programs into swap. Step 512 first was the worst order for a shared machin
 
 ## Corrected study design
 
+Built (`tools/prefill_mem.py`, `moestream.layer.EVAL_GROUPS`): items 1-4 below; item 4 is
+`--eval-groups`. Run plan: `.gpu/gpu-run moe tools/watch.sh 4 16 python3 -m tools.prefill_mem
+--config results/prefill.toml`, then the same with `--eval-groups --steps 2048 --ctx 15000`.
+
 1. **Order:** step 2048 first, then 1024, then 512 (least disk traffic first); lengths 5k, 15k, 30k.
 2. **Baseline:** keep the 2k-token warm-up; also log `active_gb` before the warm-up and check that
    active after it equals slots + resident (it did in attempt 3).
@@ -111,3 +115,34 @@ other programs into swap. Step 512 first was the worst order for a shared machin
 `a` is set by the slot-write term (0.6-0.8 GB) plus whatever the split in step 4 finds; and the
 budget's flat 1 GB plus the 1.1 GB of staging buffers outside `memory_gb` should be accounted for
 before a 128k session is trusted on 24 GB.
+
+## Design alternative: one group per layer in prefill (sketch, not built)
+
+**Idea.** During a prefill chunk, do not run a layer's experts through its slots. Gather the
+chunk's distinct routed experts (200-230 of 256) into a temporary, prefill-only expert set: the
+ones already in slots are copied from the slot tensors on the GPU, the rest are read from disk.
+Run the layer in one group against that set, then let it go at the next layer's `mx.eval`. Slots
+are left as decode tuned them; optionally refill the few hottest experts of the chunk afterwards.
+
+**Memory, per layer, one layer alive at a time** (stride 1.77 MB; distinct from recorded routing):
+
+| step | now: fills + slot copies (memory_gb 10) | one group: temporary set |
+|---|---|---|
+| 512 | 0.64 GB mean, 0.74 max | 200 x 1.77 = 0.35 GB |
+| 2048 | 0.73 GB mean, 0.78 max | 230 x 1.77 = 0.41 GB |
+
+About 0.3-0.4 GB lower peak, and the term no longer depends on the slot count, so `memory_gb` can
+give slots more without raising the prefill peak. It also removes the in-slot copy that
+`--eval-groups` would only serialize.
+
+**Time.** Disk reads stay the same for experts not in slots (upper bound 7.8 GB per 1k tokens at
+step 2048). Saved: the (groups - 1) slot-tensor copies per layer (0.1-0.3 GB of GPU copies, a few
+ms per layer at GPU bandwidth, about 0.1-0.2 s per 2048-token chunk) and the per-group dispatch.
+The larger gain is after prefill: today a long prefill evicts decode's hot experts from every layer
+(each chunk cycles 200+ experts through 64-192 slots), so the first decode tokens miss; with slots
+left alone, decode starts at its steady hit rate. Expected prefill speed change: small (+0-10%,
+not measured); decode after a long prompt: back to the steady ~90% hit rate at once.
+
+**Costs.** A second code path in `StreamingMoE.__call__` (prefill vs decode), and a gather from the
+slot tensors for resident experts. The prefill transient becomes about 0.4 GB per layer
+regardless of slots, which the budget's flat 1 GB already covers.

@@ -291,3 +291,20 @@ def test_hook_sees_decode_and_prefill(packed):
     _moe(m)[-1].io.hook = seen.append
     _decode(m, _ids(6), 4)
     assert seen == [False, True, True]
+
+
+def test_eval_groups_evaluates_each_group_and_stays_exact(packed, monkeypatch):
+    import moestream.layer as layer
+
+    out, resident = packed
+    m, _ = load(out, slots=3)
+    ids = _ids(20)
+    calls = []
+    real = mx.eval
+    monkeypatch.setattr(layer.mx, "eval", lambda *a: calls.append(len(a)) or real(*a))
+    m(ids)
+    plain = len(calls)
+    calls.clear()
+    monkeypatch.setattr(layer, "EVAL_GROUPS", True)
+    _close(m(ids), resident(ids))
+    assert len(calls) > plain        # 3 slots < experts routed by 20 tokens: several groups per layer

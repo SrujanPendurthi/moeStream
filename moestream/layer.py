@@ -19,6 +19,8 @@ from moestream.store import SlotStore
 from scripts.pack_experts import expert_from_bytes
 
 EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of the next layer's sync_s
+EVAL_GROUPS = False  # diagnostic: evaluate each expert group before the next one's slot writes, so
+                     # writes need not copy the slot tensor a pending group still reads (docs/prefill-memory.md)
 
 
 def _glu(args, slots, group_size, bits, dtype):
@@ -83,6 +85,8 @@ class StreamingMoE(nn.Module):
             yg = self._run(x, idx, experts[g : g + io.store.slots], counts[g : g + io.store.slots],
                            masked=len(experts) > io.store.slots)
             y = yg if y is None else y + yg
+            if EVAL_GROUPS and g + io.store.slots < len(experts):
+                mx.eval(y)
         io.prefetcher.drop_pending()
         if decode and io.next is not None and (lookahead or io.predictor is not None):
             guess = np.unique(np.array(pinds)).tolist() if lookahead else list(io.predictor(x))
