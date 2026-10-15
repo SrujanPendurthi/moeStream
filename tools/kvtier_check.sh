@@ -9,7 +9,8 @@
 #   disk     directory size and bytes per turn
 # context_tokens 24576 so the RAM prompt cache holds about one of these sessions, as 128k holds one
 # 75k session in real use. Thinking off so replies finish and the history re-renders exactly.
-# SERVE overrides the server command (dry run against a stub); WATCH the watchdog caps (default "4 16").
+# SERVE overrides the server command (dry run against a stub); WATCH the watchdog caps (default "4 16");
+# MEM the memory_gb (default 14.0).
 set -u
 cd "$(dirname "$0")/.."
 REPO=$(pwd)
@@ -17,6 +18,7 @@ OUT=${1:-results/kvtier}
 WATCH=${WATCH:-"4 16"}
 SERVE=${SERVE:-"/Users/srujanpendurthi/Projects/Current/.gpu/gpu-run moe tools/watch.sh $WATCH python3 -m tools.serve"}
 PAUSE=${PAUSE:-5}
+MEM=${MEM:-14.0}
 SESSIONS=astropy__astropy-12907.jsonl,django__django-10924.jsonl,astropy__astropy-6938.jsonl
 KV=$REPO/kvcache
 mkdir -p "$OUT"
@@ -25,7 +27,7 @@ export PYTHONPATH=.:../lagunaLab MOESTREAM_SHARED=1
 for tier in false true; do
   cat > "$OUT/kvtier_$tier.toml" <<EOF
 pack_dir = "$REPO/../lagunaLab/models/Laguna-XS-2.1-packed"
-memory_gb = 14.0
+memory_gb = $MEM
 context_tokens = 24576
 kv_bits = 8
 calibration = "$REPO/budget.json"
