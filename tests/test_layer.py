@@ -308,3 +308,32 @@ def test_eval_groups_evaluates_each_group_and_stays_exact(packed, monkeypatch):
     monkeypatch.setattr(layer, "EVAL_GROUPS", True)
     _close(m(ids), resident(ids))
     assert len(calls) > plain        # 3 slots < experts routed by 20 tokens: several groups per layer
+
+
+def _slots(m):
+    return [list(moe.io.store.slot_expert) for moe in _moe(m)]
+
+
+def test_prefill_set_is_exact_and_leaves_the_slots_as_they_were(packed, monkeypatch):
+    import moestream.layer as layer
+
+    out, resident = packed
+    m, _ = load(out, slots=3)
+    ids = _ids(20)
+    m(ids[:, :1])                                    # decode-sized call: fills a few slots normally
+    before, misses = _slots(m), stream_stats(m)["misses"]
+    monkeypatch.setattr(layer, "PREFILL_SET", True)
+    _close(m(ids), resident(ids))
+    assert _slots(m) == before                       # prefill did not evict what decode loaded
+    assert stream_stats(m)["misses"] > misses        # experts not in slots were read and counted
+
+
+def test_prefill_set_only_applies_when_a_layer_needs_more_than_one_group(packed, monkeypatch):
+    import moestream.layer as layer
+
+    out, resident = packed
+    m, _ = load(out, slots=TINY["num_experts"])
+    monkeypatch.setattr(layer, "PREFILL_SET", True)
+    ids = _ids(20)
+    _close(m(ids), resident(ids))
+    assert any(e != -1 for s in _slots(m) for e in s)  # fits in one group: slots used as before

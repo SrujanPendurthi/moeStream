@@ -19,6 +19,8 @@ from moestream.store import SlotStore
 from scripts.pack_experts import expert_from_bytes
 
 EVAL_WRITES = False  # diagnostic: force slot writes inside write_s instead of the next layer's sync_s
+PREFILL_SET = False  # a multi-token call that would need several groups runs once against a temporary
+                     # set of its routed experts; slots are left as decode tuned them (docs/prefill-memory.md)
 EVAL_GROUPS = False  # diagnostic: evaluate each expert group before the next one's slot writes, so
                      # writes need not copy the slot tensor a pending group still reads (docs/prefill-memory.md)
 
@@ -81,7 +83,9 @@ class StreamingMoE(nn.Module):
             io.guess = None
         io.store.tick(idx.size // idx.shape[-1])
         y = None
-        for g in range(0, len(experts), io.store.slots):
+        if PREFILL_SET and not decode and len(experts) > io.store.slots:
+            y = self._run_set(x, idx, experts)
+        for g in range(0, len(experts) if y is None else 0, io.store.slots):
             yg = self._run(x, idx, experts[g : g + io.store.slots], counts[g : g + io.store.slots],
                            masked=len(experts) > io.store.slots)
             y = yg if y is None else y + yg
@@ -114,6 +118,35 @@ class StreamingMoE(nn.Module):
             store.slot_expert[s], store.expert_slot[e] = e, s
         mx.eval(glu.parameters())
         io.glu, io.store = glu, store
+
+    def _run_set(self, x, idx, experts):
+        """One group over every routed expert: resident ones gathered from the slots on the GPU,
+        the rest read into the temporary set only. No slot is written; hits and misses are counted."""
+        io, store = self.io, self.io.store
+        have = [e for e in experts if e in store.expert_slot]
+        need = [e for e in experts if e not in store.expert_slot]
+        store.hits += len(have)
+        store.misses += len(need)
+        t0 = time.perf_counter()
+        bufs = io.prefetcher.take(need)
+        t1 = time.perf_counter()
+        read = [expert_from_bytes(bufs[e], io.layout) for e in need]  # mx.array copies here
+        for e in need:
+            io.prefetcher.release(bufs[e])
+        src = mx.array([store.expert_slot[e] for e in have]) if have else None
+        glu = io.make_glu(0)
+        for proj in ("gate_proj", "up_proj", "down_proj"):
+            for part in ("weight", "scales", "biases"):
+                parts = [getattr(getattr(io.glu, proj), part)[src]] if have else []
+                if need:
+                    parts.append(mx.stack([r[f"{proj}.{part}"] for r in read]))
+                setattr(getattr(glu, proj), part, mx.concatenate(parts) if len(parts) > 1 else parts[0])
+        io.stats["read_s"] += t1 - t0
+        io.stats["write_s"] += time.perf_counter() - t1
+        table = np.zeros(io.layout["num_experts"], np.int32)
+        for i, e in enumerate(have + need):
+            table[e] = i
+        return glu(x, mx.array(table[idx]))
 
     def _run(self, x, idx, group, counts, masked):
         io = self.io
