@@ -1,7 +1,7 @@
 # moeStream: SSD tier for the prompt cache
 
 Date: 2026-10-14
-Status: draft for review
+Status: approved by the user 2026-10-14
 
 ## Goal
 
@@ -209,9 +209,7 @@ the test prompts, so the rotating buffer wraps.
    after a RAM hit, token for token.
 5. **Disk:** directory size stays under `kv_disk_gb`; total bytes written per turn reported.
 
-## Open questions for review
+## Decisions at review (2026-10-14)
 
-- **Default cap of 10 GB** against free disk (24 GB now, and the bf16 checkpoint for bit-level work
-  would need about 66 GB).
-- **Fallback sliding snapshots every 8 turns:** costs about 8 MB per turn amortized; drop them if
-  edited histories turn out rare in the harness.
+- **Disk cap:** 10 GB default, as proposed.
+- **Fallback sliding snapshots every 8 turns:** kept.

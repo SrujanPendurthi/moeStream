@@ -1838,12 +1838,12 @@ Pass: last tok/s > first, last hit rate ≥ first, every kept math-changing tria
 
 ## Part 2: SSD tier for the prompt cache (Tasks 11-18)
 
-**Spec:** `docs/specs/2026-10-14-ssd-kv-tier-design.md` (draft, waiting for the user's review). The
+**Spec:** `docs/specs/2026-10-14-ssd-kv-tier-design.md` (approved by the user 2026-10-14). The
 spec is the authority for formats, defaults and behaviour; these tasks only cut it into reviewable
 pieces and are not copied from it.
 
-**Status:** structure only. Each task names its files, interfaces and tests; the step code is written
-once the user has reviewed the spec. No task starts before that review.
+**Status:** spec approved 2026-10-14. Tasks 11-17 are executed test-first straight from the briefs
+below and the spec (no separate step-code pass). Task 18 needs the GPU and the coordinator's go.
 
 **Global constraints (additional):** everything under Global Constraints above; no writes outside
 `kv_dir`; no extra KV copy in memory (a restore takes the place of the RAM-hit deep copy); every
