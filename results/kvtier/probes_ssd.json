@@ -1,0 +1,11 @@
+{
+ "../lagunaLab/traces/astropy__astropy-12907.jsonl": [
+  "[{\"function\": {\"name\": \"shell\", \"arguments\": \"{}\"}, \"type\": \"function\", \"id\": \"14b478f7-2abe-4f1c-9739-2d8487d599d7\"}]"
+ ],
+ "../lagunaLab/traces/django__django-10924.jsonl": [
+  "Let me look at how Django handles callable values in other fields, like `upload_to` in `FileField`:[{\"function\": {\"name\": \"shell\", \"arguments\": \"{}\"}, \"type\": \"function\", \"id\": \"f5b22f48-6691-4200-8c15-4f05495fc01a\"}]"
+ ],
+ "../lagunaLab/traces/astropy__astropy-6938.jsonl": [
+  "Now let me verify the bug by checking how `np.char.replace` works and whether it modifies in-place:[{\"function\": {\"name\": \"shell\", \"arguments\": \"{}\"}, \"type\": \"function\", \"id\": \"c6ee5cf4-2613-46c1-ac29-39af32846f70\"}]"
+ ]
+}

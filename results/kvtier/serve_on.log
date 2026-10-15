@@ -1,0 +1,150 @@
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/mlx_lm/server.py:1723: UserWarning: mlx_lm.server is not recommended for production as it only implements basic security checks.
+  warnings.warn(
+2026-10-14 21:01:42,162 - INFO - Starting httpd at 127.0.0.1 on port 8081...
+moeStream: 4928 slots (8.72 GB), per layer 96-192, half-life 64, eviction lfu, kv 8-bit
+[transformers] The tokenizer you are loading from '/Users/srujanpendurthi/Projects/Current/moeStream/../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+127.0.0.1 - - [14/Oct/2026 21:01:43] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:01:43,464 - INFO - Prompt Cache: 0 sequences, 0.00 GB
+2026-10-14 21:01:43,464 - INFO - - assistant: 0 sequences, 0.00 GB
+2026-10-14 21:01:43,464 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:01:43,464 - INFO - - system: 0 sequences, 0.00 GB
+2026-10-14 21:01:43,495 - INFO - Prompt processing progress: 0/5603
+2026-10-14 21:01:59,343 - INFO - Prompt processing progress: 2048/5603
+2026-10-14 21:02:19,666 - INFO - Prompt processing progress: 4096/5603
+2026-10-14 21:02:37,037 - INFO - Prompt processing progress: 5602/5603
+2026-10-14 21:02:38,298 - INFO - Prompt processing progress: 5603/5603
+127.0.0.1 - - [14/Oct/2026 21:02:52] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:02:52,241 - INFO - Prompt Cache: 1 sequences, 0.19 GB
+2026-10-14 21:02:52,243 - INFO - - assistant: 1 sequences, 0.19 GB
+2026-10-14 21:02:52,243 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:02:52,243 - INFO - - system: 0 sequences, 0.00 GB
+2026-10-14 21:02:52,291 - INFO - Prompt processing progress: 0/5432
+2026-10-14 21:03:09,161 - INFO - Prompt processing progress: 2048/5432
+2026-10-14 21:03:29,355 - INFO - Prompt processing progress: 4096/5432
+2026-10-14 21:03:44,713 - INFO - Prompt processing progress: 5431/5432
+2026-10-14 21:03:46,108 - INFO - Prompt processing progress: 5432/5432
+127.0.0.1 - - [14/Oct/2026 21:04:00] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:04:00,387 - INFO - Prompt Cache: 2 sequences, 0.38 GB
+2026-10-14 21:04:00,388 - INFO - - assistant: 2 sequences, 0.38 GB
+2026-10-14 21:04:00,388 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:04:00,388 - INFO - - system: 0 sequences, 0.00 GB
+2026-10-14 21:04:00,436 - INFO - Prompt processing progress: 0/5374
+2026-10-14 21:04:16,532 - INFO - Prompt processing progress: 2048/5374
+2026-10-14 21:04:36,251 - INFO - Prompt processing progress: 4096/5374
+2026-10-14 21:04:50,923 - INFO - Prompt processing progress: 5373/5374
+2026-10-14 21:04:52,271 - INFO - Prompt processing progress: 5374/5374
+127.0.0.1 - - [14/Oct/2026 21:05:04] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:05:04,496 - INFO - Prompt Cache: 2 sequences, 0.37 GB
+2026-10-14 21:05:04,497 - INFO - - assistant: 2 sequences, 0.37 GB
+2026-10-14 21:05:04,497 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:05:04,497 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 5697 tokens in 0.17 s (RAM had 0, 1597 left to process)
+2026-10-14 21:05:04,705 - INFO - Prompt processing progress: 0/1597
+2026-10-14 21:05:19,308 - INFO - Prompt processing progress: 1596/1597
+2026-10-14 21:05:20,149 - INFO - Prompt processing progress: 1597/1597
+127.0.0.1 - - [14/Oct/2026 21:05:30] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:05:30,194 - INFO - Prompt Cache: 2 sequences, 0.41 GB
+2026-10-14 21:05:30,195 - INFO - - assistant: 2 sequences, 0.41 GB
+2026-10-14 21:05:30,195 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:05:30,195 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 5516 tokens in 0.22 s (RAM had 0, 1412 left to process)
+2026-10-14 21:05:30,473 - INFO - Prompt processing progress: 0/1412
+2026-10-14 21:05:43,071 - INFO - Prompt processing progress: 1411/1412
+2026-10-14 21:05:43,906 - INFO - Prompt processing progress: 1412/1412
+127.0.0.1 - - [14/Oct/2026 21:05:56] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:05:56,778 - INFO - Prompt Cache: 2 sequences, 0.44 GB
+2026-10-14 21:05:56,779 - INFO - - assistant: 2 sequences, 0.44 GB
+2026-10-14 21:05:56,779 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:05:56,779 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 5456 tokens in 0.15 s (RAM had 0, 64 left to process)
+2026-10-14 21:05:56,962 - INFO - Prompt processing progress: 0/64
+2026-10-14 21:05:59,015 - INFO - Prompt processing progress: 63/64
+2026-10-14 21:05:59,316 - INFO - Prompt processing progress: 64/64
+127.0.0.1 - - [14/Oct/2026 21:06:08] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:06:08,683 - INFO - Prompt Cache: 2 sequences, 0.40 GB
+2026-10-14 21:06:08,684 - INFO - - assistant: 2 sequences, 0.40 GB
+2026-10-14 21:06:08,684 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:06:08,684 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 7352 tokens in 0.24 s (RAM had 0, 1609 left to process)
+2026-10-14 21:06:08,973 - INFO - Prompt processing progress: 0/1609
+2026-10-14 21:06:23,337 - INFO - Prompt processing progress: 1608/1609
+2026-10-14 21:06:24,022 - INFO - Prompt processing progress: 1609/1609
+127.0.0.1 - - [14/Oct/2026 21:06:35] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:06:35,218 - INFO - Prompt Cache: 2 sequences, 0.45 GB
+2026-10-14 21:06:35,219 - INFO - - assistant: 2 sequences, 0.45 GB
+2026-10-14 21:06:35,219 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:06:35,219 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 6997 tokens in 0.20 s (RAM had 0, 535 left to process)
+2026-10-14 21:06:35,454 - INFO - Prompt processing progress: 0/535
+2026-10-14 21:06:41,544 - INFO - Prompt processing progress: 534/535
+2026-10-14 21:06:42,197 - INFO - Prompt processing progress: 535/535
+127.0.0.1 - - [14/Oct/2026 21:06:52] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:06:52,276 - INFO - Prompt Cache: 2 sequences, 0.49 GB
+2026-10-14 21:06:52,277 - INFO - - assistant: 2 sequences, 0.49 GB
+2026-10-14 21:06:52,277 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:06:52,277 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 5570 tokens in 0.15 s (RAM had 0, 6498 left to process)
+2026-10-14 21:06:52,476 - INFO - Prompt processing progress: 0/6498
+2026-10-14 21:07:09,001 - INFO - Prompt processing progress: 2048/6498
+2026-10-14 21:07:28,501 - INFO - Prompt processing progress: 4096/6498
+2026-10-14 21:07:49,434 - INFO - Prompt processing progress: 6144/6498
+2026-10-14 21:07:57,433 - INFO - Prompt processing progress: 6497/6498
+2026-10-14 21:07:58,899 - INFO - Prompt processing progress: 6498/6498
+127.0.0.1 - - [14/Oct/2026 21:08:13] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:08:13,629 - INFO - Prompt Cache: 1 sequences, 0.33 GB
+2026-10-14 21:08:13,630 - INFO - - assistant: 1 sequences, 0.33 GB
+2026-10-14 21:08:13,630 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:08:13,630 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 9011 tokens in 0.20 s (RAM had 0, 3892 left to process)
+2026-10-14 21:08:13,911 - INFO - Prompt processing progress: 0/3892
+2026-10-14 21:08:33,558 - INFO - Prompt processing progress: 2048/3892
+2026-10-14 21:08:54,656 - INFO - Prompt processing progress: 3891/3892
+2026-10-14 21:08:55,913 - INFO - Prompt processing progress: 3892/3892
+127.0.0.1 - - [14/Oct/2026 21:09:08] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:09:08,702 - INFO - Prompt Cache: 1 sequences, 0.35 GB
+2026-10-14 21:09:08,702 - INFO - - assistant: 1 sequences, 0.35 GB
+2026-10-14 21:09:08,702 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:09:08,702 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 7601 tokens in 0.21 s (RAM had 0, 123 left to process)
+2026-10-14 21:09:09,023 - INFO - Prompt processing progress: 0/123
+2026-10-14 21:09:12,473 - INFO - Prompt processing progress: 122/123
+2026-10-14 21:09:12,864 - INFO - Prompt processing progress: 123/123
+127.0.0.1 - - [14/Oct/2026 21:09:24] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:09:24,682 - INFO - Prompt Cache: 1 sequences, 0.23 GB
+2026-10-14 21:09:24,683 - INFO - - assistant: 1 sequences, 0.23 GB
+2026-10-14 21:09:24,683 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:09:24,683 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 12161 tokens in 0.55 s (RAM had 0, 55 left to process)
+2026-10-14 21:09:25,273 - INFO - Prompt processing progress: 0/55
+2026-10-14 21:09:27,061 - INFO - Prompt processing progress: 54/55
+2026-10-14 21:09:27,329 - INFO - Prompt processing progress: 55/55
+127.0.0.1 - - [14/Oct/2026 21:09:41] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:09:41,347 - INFO - Prompt Cache: 1 sequences, 0.33 GB
+2026-10-14 21:09:41,348 - INFO - - assistant: 1 sequences, 0.33 GB
+2026-10-14 21:09:41,348 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:09:41,348 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 12972 tokens in 0.73 s (RAM had 0, 2175 left to process)
+2026-10-14 21:09:42,169 - INFO - Prompt processing progress: 0/2175
+2026-10-14 21:10:02,232 - INFO - Prompt processing progress: 2048/2175
+2026-10-14 21:10:06,714 - INFO - Prompt processing progress: 2174/2175
+2026-10-14 21:10:07,615 - INFO - Prompt processing progress: 2175/2175
+127.0.0.1 - - [14/Oct/2026 21:10:44] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:10:44,006 - INFO - Prompt Cache: 1 sequences, 0.40 GB
+2026-10-14 21:10:44,006 - INFO - - assistant: 1 sequences, 0.40 GB
+2026-10-14 21:10:44,006 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:10:44,007 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 7813 tokens in 0.48 s (RAM had 0, 1013 left to process)
+2026-10-14 21:10:44,652 - INFO - Prompt processing progress: 0/1013
+2026-10-14 21:10:54,362 - INFO - Prompt processing progress: 1012/1013
+2026-10-14 21:10:54,974 - INFO - Prompt processing progress: 1013/1013
+127.0.0.1 - - [14/Oct/2026 21:11:06] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 21:11:06,582 - INFO - Prompt Cache: 1 sequences, 0.26 GB
+2026-10-14 21:11:06,583 - INFO - - assistant: 1 sequences, 0.26 GB
+2026-10-14 21:11:06,583 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 21:11:06,583 - INFO - - system: 0 sequences, 0.00 GB
+moeStream kv tier: restored 12306 tokens in 0.66 s (RAM had 0, 976 left to process)
+2026-10-14 21:11:07,298 - INFO - Prompt processing progress: 0/976
+2026-10-14 21:11:18,222 - INFO - Prompt processing progress: 975/976
+2026-10-14 21:11:19,101 - INFO - Prompt processing progress: 976/976
+tools/watch.sh: line 21: 73133 Terminated: 15          "$@"
+watch: peak swap 429 MB, peak footprint 14336 MB

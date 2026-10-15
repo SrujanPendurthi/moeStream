@@ -46,7 +46,9 @@ def _session(f):
 
 
 def _text(m):
-    return (m.get("reasoning") or "") + (m.get("content") or "") + (json.dumps(m["tool_calls"]) if m.get("tool_calls") else "")
+    """What the model generated: tool-call ids are random per response, so they are left out."""
+    calls = [{k: v for k, v in c.items() if k != "id"} for c in m.get("tool_calls") or []]
+    return (m.get("reasoning") or "") + (m.get("content") or "") + (json.dumps(calls) if calls else "")
 
 
 def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_after=None, probe=None):

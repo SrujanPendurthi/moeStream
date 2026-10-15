@@ -82,3 +82,11 @@ def test_a_reply_with_only_tool_calls_and_no_content_key_is_kept(tmp_path, monke
     drive.live(tmp_path / "s.json", ["a"], rounds=1, url="u", log=tmp_path / "l", tag="on", pause=0)
     import json
     assert json.loads((tmp_path / "s.json").read_text())["a"]["history"][2] == {"role": "assistant", "content": "", "tool_calls": call}
+
+
+def test_probe_text_ignores_the_servers_random_tool_call_ids():
+    from tools.drive import _text
+
+    call = lambda i: {"role": "assistant", "content": "x", "tool_calls": [
+        {"id": i, "type": "function", "function": {"name": "shell", "arguments": "{}"}}]}
+    assert _text(call("05cef2f4")) == _text(call("14b478f7"))

@@ -160,6 +160,40 @@ Recommendation: **build it**, before the harness and GRPO work that will run ses
 For single-session pi use alone it would only save restarts. Spec first; mlx-lm's
 `save_prompt_cache` and `load_prompt_cache` are the starting point.
 
+## SSD tier on real weights (Task 18, 2026-10-14, `tools/kvtier_check.sh`, `results/kvtier/`)
+
+Run 3, after two stopped attempts (`results/kvtier_run2/`: a driver bug, then a watchdog stop that led
+to keeping two sliding snapshots per chain). A functional check, not a speed claim: `memory_gb = 12.0`,
+watchdog 4 GB swap / 16 GB footprint while the machine was in use, `MOESTREAM_SHARED=1` (no wired
+limit, 1 GB MLX buffer pool), `context_tokens = 24576` so RAM holds about one of the three sessions
+(as 128k holds one 75k session in real use), thinking off, tuner off. Three captured sessions
+(astropy-12907, django-10924, astropy-6938) interleaved turn by turn, keeping the model's own replies.
+
+| Phase | Result |
+|---|---|
+| off vs on, same 15 turns | prompt tokens processed **135,132 vs 36,358** (the floor exactly: first prompts plus each turn's new tokens); 1478 s vs 519 s |
+| restores during on | 12, of 5.5k-13k tokens, **0.15-0.73 s** each (prefill of the same tokens: about 55-130 s) |
+| restart | fresh server: **3 of 3** sessions resumed from SSD (15,460 / 8,893 / 13,404 tokens in 0.28 / 0.72 / 0.76 s) |
+| kill -9 mid-write | caught a `.tmp` file; nothing left running; the torn chain was dropped at startup; the next turn restored from the turn before (15,460 tokens, 0.27 s) |
+| output equality | greedy 48-token continuation after an SSD restore equals the one after a RAM hit, **3 of 3** (tool-call ids are random per response and are ignored) |
+| disk | 1.7 GB for 4 chains, under the 10 GB cap; per turn about 63 MB of sliding state plus 21.8 KB per new token |
+
+Peaks per phase (watchdog footprint / largest MLX request peak): off 16.4 GB / 14.16 GB, on 14.3 / 12.55,
+restart 13.3 / 11.42, kill9 13.3 / 11.10, equality 13.3 / 11.57; swap 0.42-0.48 GB throughout.
+
+Memory attribution (`results/kvtier/mem.log`): MLX active memory at rest is 10.2-10.4 GB (slots
+8.72 GB, resident 1.16 GB, KV and the RAM prompt cache). The per-request peak grows with the prompt
+that is prefilled: 12.07 GB at 5.4k tokens, 12.79 at 8.9k, 13.62 at 12.1k, 14.16 at 15.2k, about 1.8 GB
+plus 0.21 GB per 1000 tokens above active, against the budget's flat 1 GB for activations. The
+footprint adds about 1.2 GB of staging buffers on top. With the tier on, long prefills (and these peaks)
+mostly disappear. Not yet measured: whether the per-chunk attention scores (prefill chunk 2048 ×
+context) are the transient; at 128k it would matter.
+
+Findings: a reply cut off at `max_tokens` does not re-render as a prefix, so the next turn restores
+from the snapshot before it (the second kept snapshot is what makes that work) and its snapshot starts
+a new chain, rewriting that conversation's full-attention KV (about 370 MB here). Reusing the earlier
+chain's segments for a branch would avoid the rewrite.
+
 ## Self-tuning on real weights (Task 10, 2026-10-14, `results/tune_*`)
 
 The server tuned itself while serving captured agent sessions (`tools.drive`: turns up to about 4k

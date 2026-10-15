@@ -1,0 +1,37 @@
+[20:35:40] phase off: start
+[21:01:38] phase off: done
+watch: peak swap 477 MB, peak footprint 16384 MB
+[21:01:39] phase on: start
+[21:11:37] phase on: done (12 restores)
+watch: peak swap 429 MB, peak footprint 14336 MB
+[21:11:39] phase restart: start
+moeStream kv tier: restored 15460 tokens in 0.28 s (RAM had 0, 49 left to process)
+moeStream kv tier: restored 8893 tokens in 0.72 s (RAM had 0, 67 left to process)
+moeStream kv tier: restored 13404 tokens in 0.76 s (RAM had 0, 1348 left to process)
+[21:14:22] phase restart: done (3 of 3 sessions restored)
+watch: peak swap 429 MB, peak footprint 13312 MB
+[21:14:23] phase kill9: start
+[21:14:57] kill -9 server 82550; temp file caught mid-write: /Users/srujanpendurthi/Projects/Current/moeStream/kvcache/ecad6129ca0f/full_000.safetensors.tmp
+[21:14:59] left after kill -9 (want none):
+moeStream kv tier: dropping chain ecad6129ca0f: [Errno 2] No such file or directory: '/Users/srujanpendurthi/Projects/Current/moeStream/kvcache/ecad6129ca0f/manifest.json'
+moeStream kv tier: dropping chain ecad6129ca0f: [Errno 2] No such file or directory: '/Users/srujanpendurthi/Projects/Current/moeStream/kvcache/ecad6129ca0f/manifest.json'
+moeStream kv tier: restored 15460 tokens in 0.27 s (RAM had 0, 1500 left to process)
+[21:16:01] phase kill9: done
+watch: peak swap 421 MB, peak footprint 13312 MB
+[21:16:03] phase equality: start
+watch: peak swap 421 MB, peak footprint 13312 MB
+moeStream kv tier: restored 17689 tokens in 0.28 s (RAM had 0, 55 left to process)
+moeStream kv tier: restored 10246 tokens in 0.23 s (RAM had 0, 1417 left to process)
+moeStream kv tier: restored 14956 tokens in 0.27 s (RAM had 0, 551 left to process)
+astropy__astropy-12907.jsonl: DIFFER
+django__django-10924.jsonl: DIFFER
+astropy__astropy-6938.jsonl: DIFFER
+[21:19:27] phase equality: done
+watch: peak swap 421 MB, peak footprint 13312 MB
+[21:19:28] phase disk: 1.7G in /Users/srujanpendurthi/Projects/Current/moeStream/kvcache
+1d57c3b6995c turns 6 bytes 485633464
+1d96ecbab9b1 turns 8 bytes 380717040
+573dd78815fb turns 3 bytes 513012840
+7ff11f64bb75 turns 8 bytes 464362344
+[21:19:28] all phases done
+[21:19:28] left running (want none):
