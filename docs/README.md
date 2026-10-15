@@ -12,6 +12,7 @@ only the experts in use in memory and streaming the rest from SSD. It serves an 
 | [Self-tuning runtime](self-tuning.md) | understand what the engine tunes on its own, how it decides, and how to read its log |
 | [Tools](tools.md) | record routing, calibrate, benchmark, drive load, watch memory |
 | [Prefill memory](prefill-memory.md) | what a prefill allocates, why the study runs stopped, and how the next run is built |
+| [Long context](long-context.md) | the 81k-token run on real weights: prefill, decode, memory and the SSD restore |
 | [Development](development.md) | run tests, follow the shared-GPU rules, know what may be imported from lagunaLab |
 
 Measured results (benchmarks, the speed gate, the pi check) live in the top-level
