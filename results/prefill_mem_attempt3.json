@@ -1,0 +1,15 @@
+{
+ "memory_gb": 10.0,
+ "rows": [
+  {
+   "step": 512,
+   "tokens": 5000,
+   "active_gb": 7.55396686,
+   "peak_gb": 11.617820776,
+   "transient_gb": 4.063853916,
+   "prefill_tok_s": 48.094048257648424,
+   "top_mb": 13312
+  }
+ ],
+ "fit": {}
+}

@@ -1,0 +1,5 @@
+moeStream: 3616 slots (6.40 GB), per layer 64-128, half-life 64, eviction lfu, kv 8-bit
+[transformers] The tokenizer you are loading from '/Users/srujanpendurthi/Projects/Current/lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+{'step': 512, 'tokens': 5000, 'active_gb': 7.55396686, 'peak_gb': 11.617820776, 'transient_gb': 4.063853916, 'prefill_tok_s': 48.094048257648424, 'top_mb': 13312}
+tools/watch.sh: line 21: 10478 Terminated: 15          "$@"
+watch: peak swap 2036 MB, peak footprint 16384 MB
