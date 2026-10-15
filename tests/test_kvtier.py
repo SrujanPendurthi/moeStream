@@ -211,3 +211,83 @@ def test_a_branched_history_matches_only_its_common_snapshot(tmp_path, monkeypat
     s = _store_with(tmp_path, monkeypatch, [16, 30])                     # turn 16 is not kept, only 30
     branch = list(range(20)) + [99] * 20
     assert s.lookup(branch, ram_prefix=0, context_tokens=1000) is None
+
+
+from moestream.load import load
+from scripts.pack_experts import pack
+from tests.tiny import TINY, quantized_model_dir
+
+
+@pytest.fixture(params=[0, 8], ids=["kv0", "kv8"])
+def tiny(request, tmp_path, monkeypatch):
+    if request.param:
+        monkeypatch.setitem(TINY, "head_dim", 32)  # 16 is below the smallest quantization group
+    d, _ = quantized_model_dir(tmp_path)
+    pack(d, tmp_path / "packed")
+    m, _ = load(tmp_path / "packed", slots=4, kv_bits=request.param)
+    return m
+
+
+IDS = mx.array(np.random.default_rng(5).integers(0, TINY["vocab_size"], size=(1, 48)))
+TOK = IDS[0].tolist()
+
+
+def _prefill(model, cuts):
+    """The cache after feeding IDS in chunks ending at each cut (turn ends)."""
+    cache, at = model.make_cache(), 0
+    for c in cuts:
+        model(IDS[:, at:c], cache=cache)
+        at = c
+    mx.eval([c.state for c in cache])
+    return cache
+
+
+def _next(model, cache, at):
+    """Logits for the next three tokens, decoded one at a time."""
+    return mx.concatenate([model(IDS[:, i : i + 1], cache=cache) for i in range(at, at + 3)], axis=1)
+
+
+def test_save_then_restore_gives_bit_identical_logits(tiny, tmp_path):
+    s = Store(tmp_path / "kv", FP)
+    cache = _prefill(tiny, [30])            # window 8: the rotating buffers have wrapped
+    s.save(TOK[:30], cache)
+    s.flush()
+    (cid,) = s.chains
+    fresh = tiny.make_cache()
+    assert s.restore(cid, 30, fresh)
+    assert mx.array_equal(_next(tiny, fresh, 30), _next(tiny, cache, 30)).item()
+
+
+def test_restoring_turn_2_of_a_3_turn_chain_equals_the_cache_at_turn_2(tiny, tmp_path, monkeypatch):
+    monkeypatch.setattr(kvtier, "SLIDING_EVERY", 2)
+    s = Store(tmp_path / "kv", FP)
+    for cuts in ([10], [10, 20], [10, 20, 30]):
+        s.save(TOK[: cuts[-1]], _prefill(tiny, cuts))
+        s.flush()
+    (cid, m), = s.chains.items()
+    assert [x["n"] for x in m["snapshots"]] == [20, 30]
+    fresh = tiny.make_cache()
+    assert s.restore(cid, 20, fresh)
+    assert mx.array_equal(_next(tiny, fresh, 20), _next(tiny, _prefill(tiny, [10, 20]), 20)).item()
+
+
+def test_restore_uses_one_host_buffer_the_size_of_the_largest_array(tiny, tmp_path):
+    sizes = []
+    s = Store(tmp_path / "kv", FP, alloc=lambda n: sizes.append(n) or bytearray(n))
+    cache = _prefill(tiny, [12, 30])
+    s.save(TOK[:30], cache)
+    s.flush()
+    largest = max([a[:, :, :30].nbytes for a in _parts(cache[0])]            # one segment, [0, 30)
+                  + [c.keys.nbytes for c in cache[1:]])                         # sliding, whole
+    assert s.restore(next(iter(s.chains)), 30, tiny.make_cache())
+    assert sizes == [largest]
+
+
+def test_a_failed_read_drops_the_chain_and_returns_false(tiny, tmp_path):
+    s = Store(tmp_path / "kv", FP)
+    s.save(TOK[:30], _prefill(tiny, [30]))
+    s.flush()
+    (cid, m), = s.chains.items()
+    (tmp_path / "kv" / cid / m["segments"][0]["file"]).write_bytes(b"torn")
+    assert s.restore(cid, 30, tiny.make_cache()) is False
+    assert s.chains == {} and not (tmp_path / "kv" / cid).exists()

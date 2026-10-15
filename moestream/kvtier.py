@@ -6,6 +6,7 @@ a prefix of the next): full-attention KV appended per turn as token-range segmen
 state whole per kept snapshot. Every file is written as <name>.tmp, fsynced and renamed; the chain's
 manifest.json is replaced last, so a crash loses at most the last turn.
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -24,6 +25,8 @@ SLIDING_EVERY = 8          # besides each chain's latest, keep every 8th turn's 
 MIN_RESTORE_TOKENS = 2048  # a smaller gain over the RAM match is not worth a disk read
 MAX_WRITE_FAILURES = 3     # in a row, then writes stay off until restart
 ST_DTYPE = {mx.bfloat16: "BF16", mx.float16: "F16", mx.float32: "F32", mx.uint32: "U32"}
+MX_DTYPE = {v: k for k, v in ST_DTYPE.items()}
+NP_DTYPE = {"BF16": np.uint16, "F16": np.float16, "F32": np.float32, "U32": np.uint32}
 
 
 def log(msg):
@@ -110,6 +113,30 @@ def _write_tensors(path, tensors, meta=None):
     return write_atomic(path, body)
 
 
+def _header(path):
+    """(tensor entries, metadata, offset of the data) of a safetensors file."""
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        h = json.loads(f.read(n))
+    return h, h.pop("__metadata__", {}), 8 + n
+
+
+def _read_into(fd, view, pos):
+    got = 0
+    while got < len(view):
+        k = os.preadv(fd, [view[got:]], pos + got)
+        if k <= 0:
+            raise OSError(f"short read at {pos + got}")
+        got += k
+
+
+def _alloc(st, shape):
+    """An MLX array with its own buffer, and a writable numpy view of it."""
+    a = mx.zeros(shape, dtype=mx.uint16 if st == "BF16" else MX_DTYPE[st])
+    mx.eval(a)
+    return a, np.array(a, copy=False)
+
+
 def _files(m):
     return {e["file"]: e["bytes"] for e in m["segments"] + m["snapshots"]}
 
@@ -131,8 +158,8 @@ def _load_chain(d):
 
 
 class Store:
-    def __init__(self, dir, fingerprint):
-        self.dir = Path(dir)
+    def __init__(self, dir, fingerprint, alloc=bytearray):
+        self.dir, self.alloc = Path(dir), alloc
         self.dir.mkdir(parents=True, exist_ok=True)
         fmt = self.dir / "FORMAT"
         if not fmt.exists():
@@ -209,6 +236,61 @@ class Store:
         d = _digests(tokens, {n for n, _, _ in cands})
         n, cid = max(((n, cid) for n, sha, cid in cands if d[n] == sha), default=(0, None))
         return (n, cid) if cid else None
+
+    def restore(self, cid, n, cache):
+        """Fill `cache`, a fresh model.make_cache(), in place with chain cid at n tokens. Files are read
+        one array at a time with F_NOCACHE (no page-cache copy) into one host buffer the size of the
+        largest array. On any error: drop the chain and return False; the caller discards `cache`."""
+        try:
+            d, m = self.dir / cid, self.chains[cid]
+            snap = next(x for x in m["snapshots"] if x["n"] == n)
+            files = [(d / g["file"], g["a"], min(g["b"], n)) for g in m["segments"] if g["a"] < n]
+            heads = [(p, a, b, *_header(p)) for p, a, b in files + [(d / snap["file"], None, None)]]
+            buf = memoryview(self.alloc(max(e["data_offsets"][1] - e["data_offsets"][0]
+                                            for *_, h, _, _ in heads for e in h.values())))
+            out = {}
+            for p, a, b, h, _, start in heads:
+                fd = os.open(p, os.O_RDONLY)
+                try:
+                    if hasattr(fcntl, "F_NOCACHE"):
+                        fcntl.fcntl(fd, fcntl.F_NOCACHE, 1)
+                    for k, e in h.items():
+                        lo, hi = e["data_offsets"]
+                        _read_into(fd, buf[: hi - lo], start + lo)
+                        x = np.frombuffer(buf, NP_DTYPE[e["dtype"]], (hi - lo) // np.dtype(NP_DTYPE[e["dtype"]]).itemsize)
+                        x = x.reshape(e["shape"])
+                        if a is None:  # sliding state: whole
+                            out[k] = (e["dtype"], *_alloc(e["dtype"], e["shape"]))
+                            out[k][2][...] = x
+                        else:          # full attention: tokens [a, b) of n
+                            if k not in out:
+                                out[k] = (e["dtype"], *_alloc(e["dtype"], e["shape"][:2] + [n] + e["shape"][3:]))
+                            out[k][2][:, :, a:b] = x[:, :, : b - a]
+                finally:
+                    os.close(fd)
+            meta = heads[-1][4]
+            arr = {k: a.view(mx.bfloat16) if st == "BF16" else a for k, (st, a, _) in out.items()}
+            for i, c in enumerate(cache):
+                if isinstance(c, RotatingKVCache):
+                    c.keys, c.values = arr[f"{i}.0"], arr[f"{i}.1"]
+                    c.meta_state = json.loads(meta[str(i)])
+                elif hasattr(c, "q"):
+                    c.q.keys, c.q.values = tuple(arr[f"{i}.{j}"] for j in range(3)), tuple(arr[f"{i}.{j}"] for j in range(3, 6))
+                    c.q.offset = n
+                else:
+                    c.keys, c.values, c.offset = arr[f"{i}.0"], arr[f"{i}.1"], n
+            mx.eval([c.state for c in cache])
+            os.utime(d / "manifest.json")  # last use, for pruning
+            return True
+        except Exception as e:
+            log(f"restore of chain {cid} at {n} tokens failed ({e!r}): dropping it")
+            self._drop(cid)
+            return False
+
+    def _drop(self, cid):
+        with self.cv:
+            self.chains.pop(cid, None)
+        shutil.rmtree(self.dir / cid, ignore_errors=True)
 
     def _chain_for(self, tokens, n):
         """The chain whose latest snapshot is the longest prefix of tokens, or (None, None)."""
