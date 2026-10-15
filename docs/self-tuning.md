@@ -144,13 +144,20 @@ read-threads A/B trial gained a pair just often enough to never time out, and th
 waited behind it for 47 minutes. That led to the replay-first order, the 15-minute cap and the
 32-token windows above. Logs: `results/tune_*.log`, `results/tune_log_run1.jsonl`.
 
-**Run 2** with those fixes is in progress; its results will be added here and to the top-level
-README.
+**Run 2** with those fixes: 6 trials completed. One change kept: read threads 8 to 16, faster in
+8 of 8 A/B pairs. Prefetch was rejected at 6 of 8; eviction policy and half-life had no better
+candidate. The slot split never ran, because the guard's noise check failed on this machine
+(`math_ok` false). Start-against-end tok/s did not improve, but each end is 1-2 windows on changing
+traffic. On the same traffic, the restarted, tuned engine ran 6% faster than untuned (2 windows
+each, within noise). The restart loaded the saved state. Details and numbers: top-level README,
+"Self-tuning on real weights".
 
 ## Known limits
 
 - No tuning under continuous traffic (idle-only by design).
 - Live A/B on short agent replies is slow to decide: a pair needs about 160 tokens of uninterrupted
   decode in one request.
+- The noise check failed on this Mac (`math_ok` false), so the slot split is not tuned; the reference
+  file keeps only the verdict, not the noise numbers.
 - The guard's reference key omits `memory_gb`, and the guard's own forward passes are counted in the
   hit statistics.

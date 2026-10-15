@@ -146,3 +146,47 @@ Recommendation: **build it**, before the harness and GRPO work that will run ses
 For single-session pi use alone it would only save restarts. Spec first; mlx-lm's
 `save_prompt_cache` and `load_prompt_cache` are the starting point.
 
+## Self-tuning on real weights (Task 10, 2026-10-14, `results/tune_*`)
+
+The server tuned itself while serving captured agent sessions (`tools.drive`: turns up to about 4k
+tokens, replies up to 1024 tokens, 5 s pauses), at `memory_gb = 14`, q8 KV, 128k context, under the
+watchdog at 4 GB swap / 17 GB footprint. How it works: [docs/self-tuning.md](docs/self-tuning.md).
+
+**Run 1 (13:45-15:23):** no change kept. A read-threads A/B trial gained a pair just often enough to
+never time out, and the replay knobs waited behind it. Led to the fixes in `a23f39c`: replay knobs
+first, live trials capped at 15 minutes, 32-token A/B windows, replay workers exit with the server.
+
+**Run 2 (15:55-16:56, restart check 17:03-17:14), with those fixes:**
+
+| Trial | Time | Result |
+|---|---|---|
+| prefetch off on 10 layers | 16:06 | rejected: faster in 6 of 8 pairs (7 needed) |
+| eviction policy | 16:12 | no better candidate: LFU 15.0% simulated miss rate, LRU and FIFO not lower |
+| half-life | 16:23 | no better candidate: 64 |
+| read threads 8 to 16 | 16:31 | **kept**: faster in 8 of 8 pairs, median window time 0.86x |
+| eviction policy (retry) | 16:45 | no better candidate |
+| half-life (retry) | 16:56 | no better candidate |
+| slot split | | never ran: the quality guard's noise check failed (`math_ok` false in `tuning/reference.npz`), so the only output-changing knob stayed off |
+
+| | Run 2 first 10% | Run 2 last 10% | Run 2 all (17 windows) | Restart, same traffic as run 2's start |
+|---|---|---|---|---|
+| decode tok/s (median) | 9.40 | 7.58 | 7.81 | 9.27 (run 2 untuned on that traffic: 8.77) |
+| hit rate | 0.36 | 0.43 | 0.43 | 0.43 (untuned: 0.45) |
+
+Peak footprint 14.3 GB, swap flat at 241-249 MB, 0 failed requests. The restart loaded the saved
+state (no fingerprint warning; read threads 16).
+
+Gate: **not met as written.** Last-10% tok/s is below first-10%. But each 10% is 1-2 windows, and
+the traffic changes as the sessions go on (later turns carry longer context), so start against end
+does not isolate tuning. On the same traffic, the restarted, tuned engine ran 9.27 against 8.77 tok/s
+untuned (+6%, 2 windows each). That points the right way but is within noise. The threads trial ran
+16:16-16:31, overlapping CPU work in this session (16:15-16:25), so its 8-of-8 result may be partly
+contention.
+
+What limits it:
+- Only about 17 stats windows an hour: prefill dominates replayed traffic, because recorded replies
+  break prompt-cache reuse.
+- The slot split, expected to matter most, is off on this machine: two runs of the untuned engine
+  disagreed by more than half the strict KL thresholds, and the reference keeps only the verdict,
+  not the numbers.
+
