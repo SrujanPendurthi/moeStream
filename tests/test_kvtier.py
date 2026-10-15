@@ -205,13 +205,14 @@ def test_lookup_skips_restores_too_small_to_pay_and_entries_over_the_context(tmp
     tokens = list(range(40))
     assert s.lookup(tokens, ram_prefix=27, context_tokens=1000) is None   # 30 - 27 < 4
     assert s.lookup(tokens, ram_prefix=26, context_tokens=1000)[0] == 30
-    assert s.lookup(tokens, ram_prefix=0, context_tokens=29) is None
+    assert s.lookup(tokens, ram_prefix=0, context_tokens=29)[0] == 10     # 30 is over the context
 
 
 def test_a_branched_history_matches_only_its_common_snapshot(tmp_path, monkeypatch):
-    s = _store_with(tmp_path, monkeypatch, [16, 30])                     # turn 16 is not kept, only 30
-    branch = list(range(20)) + [99] * 20
-    assert s.lookup(branch, ram_prefix=0, context_tokens=1000) is None
+    s = _store_with(tmp_path, monkeypatch, [10, 16, 30])                 # 10 is no longer kept
+    (cid,) = s.chains
+    assert s.lookup(list(range(20)) + [99] * 20, ram_prefix=0, context_tokens=1000) == (16, cid)
+    assert s.lookup(list(range(13)) + [99] * 20, ram_prefix=0, context_tokens=1000) is None
 
 
 from moestream.load import load
@@ -294,13 +295,27 @@ def test_a_failed_read_drops_the_chain_and_returns_false(tiny, tmp_path):
     assert s.chains == {} and not (tmp_path / "kv" / cid).exists()
 
 
-def test_only_the_latest_and_every_8th_sliding_snapshot_survive(tmp_path):
+def test_only_the_latest_two_and_every_8th_sliding_snapshot_survive(tmp_path):
     s = Store(tmp_path / "kv", FP)
-    _turns(s, 0, [5 * (i + 1) for i in range(17)])
+    _turns(s, 0, [5 * (i + 1) for i in range(19)])
     (cid, m), = s.chains.items()
-    assert [x["turn"] for x in m["snapshots"]] == [8, 16, 17]
+    assert [x["turn"] for x in m["snapshots"]] == [8, 16, 18, 19]
     assert sorted(f.name for f in (tmp_path / "kv" / cid).glob("sliding_*")) == \
-        ["sliding_40.safetensors", "sliding_80.safetensors", "sliding_85.safetensors"]
+        ["sliding_40.safetensors", "sliding_80.safetensors", "sliding_90.safetensors", "sliding_95.safetensors"]
+
+
+def test_a_dead_end_reply_does_not_cost_the_turn_it_branched_from(tmp_path, monkeypatch):
+    """Regenerate or an aborted request: a reply nobody continues extends the chain; the next prompt
+    extends the turn before it, whose sliding state must still be on disk, even mid-restore."""
+    s = _store_with(tmp_path, monkeypatch, [10, 20])
+    nxt = list(range(20)) + [77] * 10                       # the real next prompt, after turn 20
+    hit = s.lookup(nxt, ram_prefix=0, context_tokens=1000)
+    cache = _make(0)
+    _grow(cache, 25, seed=9)
+    s.save(list(range(20)) + [55] * 5, cache)               # the dead end lands between lookup and restore
+    s.flush()
+    assert hit[0] == 20 and s.restore(hit[1], 20, _make(0))
+    assert s.lookup(nxt, ram_prefix=0, context_tokens=1000) == hit
 
 
 def test_writing_past_the_cap_deletes_whole_chains_least_recently_used_first(tmp_path):
@@ -320,9 +335,10 @@ def test_writing_past_the_cap_deletes_whole_chains_least_recently_used_first(tmp
 def test_a_snapshot_superseded_between_lookup_and_restore_keeps_the_chain(tmp_path, monkeypatch):
     s = _store_with(tmp_path, monkeypatch, [10])
     n, cid = s.lookup(list(range(30)), ram_prefix=0, context_tokens=1000)
-    cache = _make(0)
-    _grow(cache, 20, seed=1)
-    s.save(list(range(20)), cache)                     # the writer moves the chain on: sliding_10 goes
-    s.flush()
+    for k in (20, 30):                                 # the writer moves the chain on twice: sliding_10 goes
+        cache = _make(0)
+        _grow(cache, k, seed=1)
+        s.save(list(range(k)), cache)
+        s.flush()
     assert s.restore(cid, n, _make(0)) is False
-    assert cid in s.chains and s.chains[cid]["snapshots"][-1]["n"] == 20
+    assert cid in s.chains and s.chains[cid]["snapshots"][-1]["n"] == 30

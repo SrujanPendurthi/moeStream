@@ -75,9 +75,9 @@ kvcache/                              kv_dir in moestream.toml
 - **Full-attention KV is append-only.** A turn writes only its new token range for the 10 full layers,
   in the live format (q8 by default: packed values, scales, biases), so a 75k-token chain is about
   1.6 GB on disk however many turns it took.
-- **Sliding state is whole per snapshot**, since a rotating buffer cannot be rebuilt from deltas. Only
-  the latest one per chain is kept, plus one every 8 turns as a fallback for histories edited
-  further back. Older ones are deleted when a newer one lands.
+- **Sliding state is whole per snapshot**, since a rotating buffer cannot be rebuilt from deltas. The
+  latest two per chain are kept (amended 2026-10-14, see below), plus one every 8 turns as a fallback
+  for histories edited further back. Older ones are deleted when a newer one lands.
 - A **chain** is a sequence of snapshots where each is a prefix of the next. A snapshot whose tokens
   extend an existing chain's latest snapshot is appended to it; otherwise it starts a new chain. That
   covers a conversation that branches: the branch gets a new chain from its first unmatched turn.
@@ -179,7 +179,8 @@ the test prompts, so the rotating buffer wraps.
 3. **Append-only chains:** three turns write three full-attention segments; the chain's bytes equal
    the cache's full-attention bytes at turn 3; restoring turn 2 from a 3-turn chain truncates
    correctly.
-4. **Sliding state retention:** only the latest and every 8th sliding snapshot survive.
+4. **Sliding state retention:** only the latest two and every 8th sliding snapshot survive; a dead-end
+   reply that lands between a lookup and its restore does not cost the turn it branched from.
 5. **Lookup:** the longest matching snapshot wins; a match under `min_restore_tokens` reads nothing;
    a branch starts a new chain; an entry longer than `context_tokens` is skipped.
 6. **Crash safety:** a `.tmp` file left by a killed writer is ignored and deleted at startup; a
@@ -213,3 +214,11 @@ the test prompts, so the rotating buffer wraps.
 
 - **Disk cap:** 10 GB default, as proposed.
 - **Fallback sliding snapshots every 8 turns:** kept.
+
+## Amendment (2026-10-14, approved by the user)
+
+- **Keep the latest two sliding snapshots per chain**, not one. Task 18 run 2 showed why: a reply that
+  nothing continues (a regenerate, an aborted request, or the check's own greedy probe) extends the
+  chain and became its only kept snapshot, so the turn the conversation actually continues from lost
+  its sliding state, mid-restore, and the request fell back to a 15.6k-token prefill. Cost: 63 MB per
+  chain on disk. Two dead ends in a row still lose it.

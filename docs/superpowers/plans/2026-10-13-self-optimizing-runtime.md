@@ -1927,6 +1927,10 @@ the test prompts so the rotating buffer wraps.
 
 ### Task 18: Verify on real weights (gated)
 
+**Note (2026-10-14):** run 2 stopped in phase on (watchdog); the spec was amended to keep the latest
+two sliding snapshots per chain, the check script now stops the whole run on a failed phase, and
+the server logs MLX memory per request (`MOESTREAM_MEMLOG`). Retry at `memory_gb = 12.0`.
+
 **Needs the GPU lock (`.gpu/gpu-run moe`), the watchdog (`tools/watch.sh 4 17` while the user is on the machine) and the coordinator's go before each run.** Kill servers by PID; `ps` check afterwards.
 
 **Files:** Modify `tools/drive.py` (live-use mode: keep the model's own replies in the history, sessions interleaved turn by turn); Modify `README.md`; results under `results/kvtier_*`

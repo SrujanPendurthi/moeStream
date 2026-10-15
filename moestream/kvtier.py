@@ -21,7 +21,7 @@ import numpy as np
 from mlx_lm.models.cache import RotatingKVCache
 
 FORMAT_VERSION = 1
-SLIDING_EVERY = 8          # besides each chain's latest, keep every 8th turn's sliding state
+SLIDING_EVERY = 8          # besides each chain's latest two, keep every 8th turn's sliding state
 MIN_RESTORE_TOKENS = 2048  # a smaller gain over the RAM match is not worth a disk read
 MAX_WRITE_FAILURES = 3     # in a row, then writes stay off until restart
 ST_DTYPE = {mx.bfloat16: "BF16", mx.float16: "F16", mx.float32: "F32", mx.uint32: "U32"}
@@ -325,7 +325,7 @@ class Store:
             turn = m["turns"] + 1
             m2 = {"turns": turn,
                   "segments": m["segments"] + [{"a": a, "b": n, "file": seg, "bytes": nb}],
-                  "snapshots": [s for s in m["snapshots"] if s["turn"] % SLIDING_EVERY == 0]
+                  "snapshots": [s for s in m["snapshots"] if s["turn"] % SLIDING_EVERY == 0 or s is m["snapshots"][-1]]
                   + [{"n": n, "sha": _digests(tokens, [n])[n], "turn": turn, "file": sl, "bytes": ns}]}
             write_atomic(d / "manifest.json", lambda f: f.write(json.dumps(m2).encode()))
         except BaseException:
