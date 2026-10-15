@@ -234,13 +234,13 @@ def test_load_from_config_file(packed, tmp_path, monkeypatch):
     _close(_decode(m, ids, 6), resident(ids))
 
 
-def test_config_load_reserves_kv_for_the_live_and_one_stored_session(packed, tmp_path, monkeypatch):
+def test_kv_sessions_2_reserves_kv_for_the_live_and_one_stored_session(packed, tmp_path, monkeypatch):
     out, _ = packed
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
     # 3.5 GB covers resident + activations (1.3 + 0.021 x 32.768 = 1.99 GB) + one 32k-token bf16 KV
     # (1.34 GB), not two
     with pytest.raises(ValueError, match="KV"):
-        load(EngineConfig(pack_dir=str(out), memory_gb=3.5, kv_bits=0, context_tokens=32768))
+        load(EngineConfig(pack_dir=str(out), memory_gb=3.5, kv_bits=0, context_tokens=32768, kv_sessions=2))
 
 
 def test_resize_between_tokens_keeps_decode_bit_exact(tmp_path):
@@ -380,3 +380,17 @@ def test_lookahead_false_turns_lookahead_off_on_every_layer(packed, monkeypatch)
     assert all(not moe.io.lookahead for moe in _moe(m))
     assert all(moe.io.lookahead for moe in _moe(load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0,
                                                                    context_tokens=1024, lookahead=True))[0]))
+
+
+def test_the_banner_says_how_many_sessions_of_kv_are_reserved(packed, monkeypatch, capsys):
+    out, _ = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
+    load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=1024))
+    assert "KV for 1 session of 1024 tokens" in capsys.readouterr().err
+
+
+def test_one_kv_session_without_the_ssd_tier_warns(packed, monkeypatch):
+    out, _ = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
+    with pytest.warns(UserWarning, match="kv_sessions = 1.*kv_tier"):
+        load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=1024, kv_tier=False))

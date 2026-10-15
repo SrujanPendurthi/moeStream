@@ -49,8 +49,9 @@ settings, not the engine: q8 KV's dequantize (~42 ms per token) and lookahead pr
 bf16 KV and lookahead off moeStream is within 4% of lagunaLab (113.3 vs 108.8 ms).
 
 **Defaults since 2026-10-15** (the user's decision): lookahead off; KV stays q8; the activation
-reserve is 1.3 GB + 0.021 GB per 1k context tokens instead of a flat 1 GB, which halves the default's
-slots at 128k (6.12 to 3.09 GB) unless `kv_sessions = 1`; bf16 KV at 81k fits at `memory_gb = 12`
+reserve is 1.3 GB + 0.021 GB per 1k context tokens instead of a flat 1 GB; KV is reserved for one
+session (`kv_sessions = 1`), the SSD tier holding the other conversations, so the default keeps 5.94 GB
+of slots at 128k (was 6.12 GB with a flat reserve and two sessions); bf16 KV at 81k fits at `memory_gb = 12`
 with `release_evicted_caches = true` (opt-in).
 
 ## Results (warm, `results/bench.json`, superseded: uncapped pool, Phase 1)

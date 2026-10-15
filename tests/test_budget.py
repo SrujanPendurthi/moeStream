@@ -81,3 +81,10 @@ def test_activation_reserve_grows_with_the_context():
     assert activation_bytes(0) == int(1.3 * GB)
     assert activation_bytes(131072) == int(1.3 * GB + 0.021 * GB * 131.072)   # ~4.05 GB at 128k
     assert activation_bytes(32768) < activation_bytes(131072)
+
+
+def test_the_shipped_default_gets_about_5_94_gb_of_slots():
+    from moestream.budget import activation_bytes
+
+    b = cap_budget_bytes(14 * GB, 1.16 * GB, 131072, kv_bits=8, activations=activation_bytes(131072))  # 1 session
+    assert abs(b / GB - 5.94) < 0.01

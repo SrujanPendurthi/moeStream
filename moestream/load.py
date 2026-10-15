@@ -30,8 +30,12 @@ def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=No
     prefill activation reserve (defaults to target_ctx)."""
     if isinstance(pack_dir, EngineConfig):
         c = pack_dir
-        # served: KV for kv_sessions sessions, by default the live one plus one stored conversation
-        # cache (tools/serve.py caps those); 1 leaves other conversations to the SSD tier
+        if c.kv_sessions == 1 and not c.kv_tier:
+            warnings.warn("kv_sessions = 1 with kv_tier off: KV is reserved for the live session only and no SSD "
+                          "tier holds the others, so a second conversation in the RAM prompt cache is not budgeted; "
+                          "use kv_sessions = 2 or turn kv_tier on")
+        # served: KV for kv_sessions sessions of context_tokens; the default 1 is the live session, with
+        # other conversations in the SSD tier; 2 adds one stored conversation cache in RAM
         model, tok = load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
                           target_ctx=c.kv_sessions * c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction,
                           floor=floor, context_tokens=c.context_tokens)
@@ -101,7 +105,11 @@ def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=No
         make_quantized_cache(model, bits=kv_bits, group_size=gs)  # bad head_dim fails here, not mid-generation
         model.make_cache = lambda: make_quantized_cache(model, bits=kv_bits, group_size=gs)
     n = sum(per.values())
-    reserve = f", activations {act / GB:.2f} GB reserved" if slots is None and budget_gb is None else ""
+    reserve = ""
+    if slots is None and budget_gb is None:
+        ctx = context_tokens or target_ctx
+        k = target_ctx // ctx
+        reserve = f", KV for {k} session{'s' if k != 1 else ''} of {ctx} tokens, activations {act / GB:.2f} GB reserved"
     print(f"moeStream: {n} slots ({n * stride / GB:.2f} GB), per layer {min(per.values())}-{max(per.values())}, "
           f"half-life {half_life:g}, eviction {eviction}, kv {kv_bits or 16}-bit{reserve}", file=sys.stderr)
     tok = None

@@ -38,7 +38,7 @@ class EngineConfig:
     kv_disk_gb: float = 10.0
     mlx_cache_gb: float = 1.0
     lookahead: bool = False
-    kv_sessions: int = 2
+    kv_sessions: int = 1
     prompt_cache_entries: int = 6
     release_evicted_caches: bool = False
 
