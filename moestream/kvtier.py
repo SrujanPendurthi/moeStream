@@ -21,6 +21,7 @@ from mlx_lm.models.cache import RotatingKVCache
 
 FORMAT_VERSION = 1
 SLIDING_EVERY = 8          # besides each chain's latest, keep every 8th turn's sliding state
+MIN_RESTORE_TOKENS = 2048  # a smaller gain over the RAM match is not worth a disk read
 MAX_WRITE_FAILURES = 3     # in a row, then writes stay off until restart
 ST_DTYPE = {mx.bfloat16: "BF16", mx.float16: "F16", mx.float32: "F32", mx.uint32: "U32"}
 
@@ -195,6 +196,19 @@ class Store:
                 with self.cv:
                     self.busy = False
                     self.cv.notify_all()
+
+    def lookup(self, tokens, ram_prefix, context_tokens):
+        """(n, chain) for the longest snapshot that is a prefix of the prompt and beats the RAM
+        match by MIN_RESTORE_TOKENS, or None. Hashes the prompt once; reads no KV."""
+        with self.cv:
+            cands = [(s["n"], s["sha"], cid) for cid, m in self.chains.items() for s in m["snapshots"]]
+        cands = [c for c in cands if c[0] < len(tokens) and c[0] <= context_tokens
+                 and c[0] - ram_prefix >= MIN_RESTORE_TOKENS]
+        if not cands:
+            return None
+        d = _digests(tokens, {n for n, _, _ in cands})
+        n, cid = max(((n, cid) for n, sha, cid in cands if d[n] == sha), default=(0, None))
+        return (n, cid) if cid else None
 
     def _chain_for(self, tokens, n):
         """The chain whose latest snapshot is the longest prefix of tokens, or (None, None)."""

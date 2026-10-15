@@ -179,3 +179,35 @@ def test_three_failed_writes_in_a_row_turn_writes_off(tmp_path, monkeypatch):
     assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]
     s.save(list(range(10)), _make(0))
     assert not s.pending
+
+
+def _store_with(tmp_path, monkeypatch, lengths, base=0, s=None):
+    monkeypatch.setattr(kvtier, "MIN_RESTORE_TOKENS", 4)
+    s = s or Store(tmp_path / "kv", FP)
+    _turns(s, 0, lengths, base=base)
+    return s
+
+
+def test_lookup_finds_the_longest_snapshot_that_prefixes_the_prompt(tmp_path, monkeypatch):
+    s = _store_with(tmp_path, monkeypatch, [10, 20, 30])
+    s = _store_with(tmp_path, monkeypatch, [40], base=1, s=s)          # another conversation
+    (cid, m), = [(c, m) for c, m in s.chains.items() if m["turns"] == 3]
+    m["snapshots"].insert(0, {**m["snapshots"][0], "n": 20, "sha": kvtier._digests(range(20), [20])[20]})
+    assert s.lookup(list(range(35)), ram_prefix=0, context_tokens=1000) == (30, cid)
+    assert s.lookup(list(range(25)), ram_prefix=0, context_tokens=1000) == (20, cid)
+    assert s.lookup(list(range(30)), ram_prefix=0, context_tokens=1000) == (20, cid)  # one token must be left to process
+    assert s.lookup([9] * 35, ram_prefix=0, context_tokens=1000) is None
+
+
+def test_lookup_skips_restores_too_small_to_pay_and_entries_over_the_context(tmp_path, monkeypatch):
+    s = _store_with(tmp_path, monkeypatch, [10, 30])
+    tokens = list(range(40))
+    assert s.lookup(tokens, ram_prefix=27, context_tokens=1000) is None   # 30 - 27 < 4
+    assert s.lookup(tokens, ram_prefix=26, context_tokens=1000)[0] == 30
+    assert s.lookup(tokens, ram_prefix=0, context_tokens=29) is None
+
+
+def test_a_branched_history_matches_only_its_common_snapshot(tmp_path, monkeypatch):
+    s = _store_with(tmp_path, monkeypatch, [16, 30])                     # turn 16 is not kept, only 30
+    branch = list(range(20)) + [99] * 20
+    assert s.lookup(branch, ram_prefix=0, context_tokens=1000) is None
