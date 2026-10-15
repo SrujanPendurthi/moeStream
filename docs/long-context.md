@@ -138,3 +138,31 @@ batched path keeps the prompt's and the reply's caches and deep-copies a RAM hit
 more change before it is safe as a default at 128k: cap the RAM prompt cache to one entry on that
 path (or skip the prompt-only insert), and re-measure. Until then: (b) at `memory_gb = 12` for
 sessions up to ~80k, and q8 for longer ones.
+
+## The three 81k runs, and where the extra KV copy was (2026-10-15)
+
+| | 1: q8, lookahead on, 14 GB | 2: bf16, lookahead off, 1 session, 12 GB | 3: as 2, RAM cache 1 entry |
+|---|---|---|---|
+| results | `results/longctx/` | `results/longctx_bf16/` | `results/longctx_bf16_cap1/` |
+| prefill 80,583 tokens | 59.8 tok/s | 55.3 tok/s | 56.2 tok/s |
+| decode at ~81k | 3.1-3.3 tok/s | 4.3-5.0 tok/s | 4.1-5.0 tok/s |
+| decode hit rate | 0.80 | 0.71 / 0.63 | 0.71 / 0.66 / 0.70 |
+| MLX active between turns | 10.9 GB | 12.4 GB | 12.4 GB |
+| MLX peak | 11.72 GB | 15.81 GB | 15.81 GB |
+| footprint (watchdog) / swap | 13.0 / 0.54 GB | 15.0 / 0.46 GB | 16.0 / 0.46 GB |
+| SSD restore after restart | 0.75 s | 1.28 s | 1.29 s |
+
+Run 3 capped mlx-lm's RAM prompt cache to one entry (`prompt_cache_entries = 1`) and changed
+nothing: the new log fields show the RAM cache held one entry (3.4 GB) throughout, and its byte cap
+had already limited it to one session. Between turns, active memory was resident (1.16) + slots
+(4.47) + two KV copies (2 x 3.4). The second copy was the SSD tier's writer: a snapshot's arrays
+share the live cache's buffers, and the writer loop kept the last job bound until the next one
+arrived. Fixed in c8f5b72 (test: `test_the_writer_lets_go_of_a_written_snapshot`). The same copy
+was in run 1 (10.9 = 1.16 + 6.14 + 2 x 1.8). The peaks (+3.3 GB over the rest level, at the end of
+a turn) are one more transient KV copy, likely the final insert or KV growth; not yet split.
+
+**Expected with the fix (not yet measured):** bf16 at 81k ~9.1 GB between turns, peak ~12.4 GB,
+footprint ~14 GB at `memory_gb = 12`; so `memory_gb = 14` (slots ~6.5 GB) should fit 81k under the
+17 GB watchdog. At 128k, KV is 5.4 GB per copy: rest ~1.16 + 6.5 + 5.4 = 13.1 GB, peak ~18.5 GB:
+does not fit at `memory_gb = 14` with bf16 unless the transient copy goes too; q8 at 128k
+(2.85 GB per copy) would, with room.
