@@ -1,0 +1,93 @@
+{
+ "memory_gb": 10.0,
+ "eval_groups": false,
+ "prefill_set": false,
+ "slots_gb": 6.398410752,
+ "resident_gb": 1.155702633,
+ "active_after_warmup_gb": 7.554405138,
+ "warmup_filled": true,
+ "rows": [
+  {
+   "step": 2048,
+   "tokens": 5000,
+   "active_gb": 7.55396686,
+   "peak_gb": 8.957911946,
+   "transient_gb": 1.403945086,
+   "prefill_tok_s": 88.98479815500812,
+   "top_mb": 11264,
+   "cache_gb": 0.241799576,
+   "bytes_read": 47867756544,
+   "pageins": 2486091
+  },
+  {
+   "step": 2048,
+   "tokens": 15000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.165038494,
+   "transient_gb": 1.611071634,
+   "prefill_tok_s": 80.94357648508377,
+   "top_mb": 11264,
+   "cache_gb": 0.321338516,
+   "bytes_read": 125048586240,
+   "pageins": 6501555
+  },
+  {
+   "step": 2048,
+   "tokens": 30000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.481511818,
+   "transient_gb": 1.927544958,
+   "prefill_tok_s": 75.62903789742042,
+   "top_mb": 12288,
+   "cache_gb": 0.629902744,
+   "bytes_read": 231034650624,
+   "pageins": 12016627
+  },
+  {
+   "step": 1024,
+   "tokens": 5000,
+   "active_gb": 7.55396686,
+   "peak_gb": 8.665363406,
+   "transient_gb": 1.111396546,
+   "prefill_tok_s": 69.93559867268667,
+   "top_mb": 11264,
+   "cache_gb": 0.2359789,
+   "bytes_read": 76934873088,
+   "pageins": 3993263
+  },
+  {
+   "step": 1024,
+   "tokens": 15000,
+   "active_gb": 7.55396686,
+   "peak_gb": 8.906773356,
+   "transient_gb": 1.352806496,
+   "prefill_tok_s": 66.50851079511534,
+   "top_mb": 11264,
+   "cache_gb": 0.313114772,
+   "bytes_read": 224386744320,
+   "pageins": 11665286
+  },
+  {
+   "step": 1024,
+   "tokens": 30000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.281049452,
+   "transient_gb": 1.727082592,
+   "prefill_tok_s": 63.063339253141486,
+   "top_mb": 11264,
+   "cache_gb": 0.479476884,
+   "bytes_read": 433929388032,
+   "pageins": 22572128
+  }
+ ],
+ "fit": {
+  "1024": {
+   "gb": 0.9862111395789472,
+   "gb_per_1k_tokens": 0.024653044305263157
+  },
+  "2048": {
+   "gb": 1.2982510481052632,
+   "gb_per_1k_tokens": 0.020956170673684205
+  }
+ }
+}
