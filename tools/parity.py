@@ -59,3 +59,42 @@ def valid_call(call, tools):
         if not _typed(v, props[k].get("type", "string")):
             return False, f"{k} is not a {props[k].get('type')}"
     return True, ""
+
+
+def _ulp(x):
+    import math
+
+    return 2.0 ** (math.floor(math.log2(abs(x))) - 7) if x else 2.0 ** -133
+
+
+def is_tie(logits, a, b, ulps=4):
+    """Tokens a and b are the top two and their logits are within `ulps` bf16 ulps: an exact engine
+    can flip between them on summation order alone (lagunaLab runbook: 0-4 ulps measured)."""
+    import mlx.core as mx
+
+    top2 = set(mx.argsort(-logits)[:2].tolist())
+    if {a, b} != top2:
+        return False
+    la, lb = float(logits[a]), float(logits[b])
+    return abs(la - lb) <= ulps * _ulp(max(abs(la), abs(lb)))
+
+
+def first_diff(ref_ids, got_ids):
+    """Index of the first differing token, or None if one is the other (equal)."""
+    for i, (r, g) in enumerate(zip(ref_ids, got_ids)):
+        if r != g:
+            return i
+    return None if len(ref_ids) == len(got_ids) else min(len(ref_ids), len(got_ids))
+
+
+def classify(model, prefix_ids, ref_ids, got_ids):
+    """"exact", "tie" (the first differing token was a near-tie under this model's own logits) or "real"."""
+    import mlx.core as mx
+
+    i = first_diff(ref_ids, got_ids)
+    if i is None:
+        return "exact"
+    if i >= len(ref_ids) or i >= len(got_ids):
+        return "real"  # one stopped where the other went on: not a single-token flip
+    logits = model(mx.array([list(prefix_ids) + list(ref_ids[:i])]))[0, -1].astype(mx.float32)
+    return "tie" if is_tie(logits, ref_ids[i], got_ids[i]) else "real"
