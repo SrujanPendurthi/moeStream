@@ -1,2 +1,6 @@
 moeStream: 3198 slots (5.66 GB), per layer 82-82, half-life 256, eviction lfu, kv 8-bit, KV for 1 session of 90112 tokens, activations 3.19 GB reserved
 [transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-pruned-50-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+django__django-11019 {"tokens": 42771, "assistant_tokens": 18397, "truncated": false, "kl_top64_mean": 0.00806119292974472, "kl_top64_p99": 0.049877386540174484, "top1_agree": 0.9922269935315541, "peak_mem_gb": 8.92948731, "tok_per_s": 104.65869040854776, "ref_model": null}
+summary: {"sessions": 1, "failed": 0, "assistant_tokens": 18397, "kl_top64_mean": 0.00806119292974472, "kl_top64_p99_max": 0.049877386540174484, "top1_agree": 0.9922269935315541, "peak_mem_gb_max": 8.92948731} gate: {"kl": 0.02, "top1": 0.98, "pass": true}
+watch: peak swap 234 MB, peak footprint 11264 MB
+exit 0

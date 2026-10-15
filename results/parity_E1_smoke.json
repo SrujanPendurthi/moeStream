@@ -1,0 +1,34 @@
+{
+ "id": "E1",
+ "pack": "../lagunaLab/models/Laguna-XS-2.1-pruned-50-packed",
+ "kv_bits": 8,
+ "memory_gb": 12.0,
+ "refs": "../lagunaLab/refs/kv",
+ "sessions": {
+  "django__django-11019": {
+   "tokens": 42771,
+   "assistant_tokens": 18397,
+   "truncated": false,
+   "kl_top64_mean": 0.00806119292974472,
+   "kl_top64_p99": 0.049877386540174484,
+   "top1_agree": 0.9922269935315541,
+   "peak_mem_gb": 8.92948731,
+   "tok_per_s": 104.65869040854776,
+   "ref_model": null
+  }
+ },
+ "summary": {
+  "sessions": 1,
+  "failed": 0,
+  "assistant_tokens": 18397,
+  "kl_top64_mean": 0.00806119292974472,
+  "kl_top64_p99_max": 0.049877386540174484,
+  "top1_agree": 0.9922269935315541,
+  "peak_mem_gb_max": 8.92948731
+ },
+ "gate": {
+  "kl": 0.02,
+  "top1": 0.98,
+  "pass": true
+ }
+}
