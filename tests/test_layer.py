@@ -337,3 +337,20 @@ def test_prefill_set_only_applies_when_a_layer_needs_more_than_one_group(packed,
     ids = _ids(20)
     _close(m(ids), resident(ids))
     assert any(e != -1 for s in _slots(m) for e in s)  # fits in one group: slots used as before
+
+
+def test_prefill_chunks_evaluated_as_mlx_lm_does_do_not_pile_up_slot_writes(packed):
+    """mlx-lm's prefill evaluates only the caches per chunk; nothing reads the last layer's expert
+    output, so its slot writes must not stay pending across chunks (results/prefill_mem_main.json)."""
+    out, _ = packed
+    m, _ = load(out, slots=3)
+    cache = m.make_cache()
+    rng = np.random.default_rng(0)
+    mx.eval(m.parameters())
+    active = []
+    for _ in range(12):
+        m(mx.array(rng.integers(0, TINY["vocab_size"], size=(1, 16))), cache=cache)
+        mx.eval([c.state for c in cache])
+        mx.clear_cache()
+        active.append(mx.get_active_memory())
+    assert active[-1] - active[2] < 9 * 2000      # was ~25 KB per chunk

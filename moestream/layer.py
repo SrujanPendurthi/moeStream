@@ -91,6 +91,11 @@ class StreamingMoE(nn.Module):
             y = yg if y is None else y + yg
             if EVAL_GROUPS and g + io.store.slots < len(experts):
                 mx.eval(y)
+        if not decode:
+            # mlx-lm's prefill evaluates only the caches per chunk, and nothing reads the last layer's
+            # expert output, so without this its slot writes stay pending, about one layer of experts
+            # (~0.4 GB) per chunk until the end of the prompt (results/prefill_mem_main.json)
+            mx.async_eval(io.glu.parameters())
         io.prefetcher.drop_pending()
         if decode and io.next is not None and (lookahead or io.predictor is not None):
             guess = np.unique(np.array(pinds)).tolist() if lookahead else list(io.predictor(x))
