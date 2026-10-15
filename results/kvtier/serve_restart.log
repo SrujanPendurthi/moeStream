@@ -1,0 +1,13 @@
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/mlx_lm/server.py:1723: UserWarning: mlx_lm.server is not recommended for production as it only implements basic security checks.
+  warnings.warn(
+2026-10-14 20:18:59,937 - INFO - Starting httpd at 127.0.0.1 on port 8081...
+moeStream: 5504 slots (9.74 GB), per layer 96-256, half-life 64, eviction lfu, kv 8-bit
+[transformers] The tokenizer you are loading from '/Users/srujanpendurthi/Projects/Current/moeStream/../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+127.0.0.1 - - [14/Oct/2026 20:19:01] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-14 20:19:01,000 - INFO - Prompt Cache: 0 sequences, 0.00 GB
+2026-10-14 20:19:01,000 - INFO - - assistant: 0 sequences, 0.00 GB
+2026-10-14 20:19:01,000 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-14 20:19:01,000 - INFO - - system: 0 sequences, 0.00 GB
+2026-10-14 20:19:01,035 - INFO - Prompt processing progress: 0/15629
+tools/watch.sh: line 21: 43416 Terminated: 15          "$@"
+watch: peak swap 1163 MB, peak footprint 8509 MB

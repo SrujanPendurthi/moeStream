@@ -1,0 +1,8 @@
+[19:43:31] phase off: start
+[20:07:00] phase off: done
+watch: peak swap 1242 MB, peak footprint 16384 MB
+[20:07:00] phase on: start
+[20:18:55] phase on: done
+aborted: paging (swap 1703 MB, footprint 17408 MB; caps 4 GB / 16 GB)
+watch: peak swap 1703 MB, peak footprint 17408 MB
+[20:18:56] phase restart: start

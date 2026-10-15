@@ -1,0 +1,96 @@
+[19:43:31] phase off: start
+[20:07:00] phase off: done
+watch: peak swap 1242 MB, peak footprint 16384 MB
+[20:07:00] phase on: start
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 154, in <module>
+    main()
+    ~~~~^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 134, in main
+    return live(a.live, files, a.rounds, a.url, a.log, a.tag, a.pause, a.max_tokens, a.probe_after, a.probe)
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 109, in live
+    probes(probe_after, f, 2)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 77, in probes
+    got[f] = [_text(ask(f, True)[0]["choices"][0]["message"]) for _ in range(n)]
+                    ~~~^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 71, in ask
+    r = _post(url, body)
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 38, in _post
+    return json.loads(urllib.request.urlopen(req, timeout=1800).read())
+                      ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 489, in open
+    response = self._open(req, data)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 506, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 1348, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 1323, in do_open
+    r = h.getresponse()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 1430, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 300, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+[20:18:55] phase on: done
+aborted: paging (swap 1703 MB, footprint 17408 MB; caps 4 GB / 16 GB)
+watch: peak swap 1703 MB, peak footprint 17408 MB
+[20:18:56] phase restart: start
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 154, in <module>
+    main()
+    ~~~~^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 134, in main
+    return live(a.live, files, a.rounds, a.url, a.log, a.tag, a.pause, a.max_tokens, a.probe_after, a.probe)
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 112, in live
+    probes(probe, f, 1)
+    ~~~~~~^^^^^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 77, in probes
+    got[f] = [_text(ask(f, True)[0]["choices"][0]["message"]) for _ in range(n)]
+                    ~~~^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 71, in ask
+    r = _post(url, body)
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/drive.py", line 38, in _post
+    return json.loads(urllib.request.urlopen(req, timeout=1800).read())
+                      ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 489, in open
+    response = self._open(req, data)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 506, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 1348, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/urllib/request.py", line 1323, in do_open
+    r = h.getresponse()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 1430, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 331, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/http/client.py", line 300, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
