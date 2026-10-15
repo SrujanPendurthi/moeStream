@@ -1,0 +1,8 @@
+{"event": "fetch", "t": 1792055982.5, "prompt_tokens": 80583, "reused": 0, "active_gb": 1.156, "cache_gb": 0.0, "peak_gb": 1.156, "hits": 0, "misses": 0}
+{"event": "insert", "t": 1792057433.71, "tokens": 80923, "cache_type": "assistant", "active_gb": 9.1, "cache_gb": 1.022, "peak_gb": 10.435, "hits": 102593, "misses": 341384}
+{"event": "fetch", "t": 1792057438.84, "prompt_tokens": 81054, "reused": 80923, "active_gb": 9.1, "cache_gb": 1.022, "peak_gb": 10.435, "hits": 102593, "misses": 341384}
+{"event": "insert", "t": 1792057562.89, "tokens": 81432, "cache_type": "assistant", "active_gb": 10.94, "cache_gb": 1.029, "peak_gb": 11.663, "hits": 201968, "misses": 366615}
+{"event": "fetch", "t": 1792057568.04, "prompt_tokens": 81636, "reused": 81432, "active_gb": 9.111, "cache_gb": 1.113, "peak_gb": 11.663, "hits": 201968, "misses": 366615}
+{"event": "insert", "t": 1792057710.8, "tokens": 82074, "cache_type": "assistant", "active_gb": 10.963, "cache_gb": 1.037, "peak_gb": 11.723, "hits": 316370, "misses": 396178}
+{"event": "fetch", "t": 1792057722.16, "prompt_tokens": 82202, "reused": 82074, "active_gb": 3.005, "cache_gb": 0.0, "peak_gb": 3.005, "hits": 0, "misses": 0}
+{"event": "insert", "t": 1792057833.02, "tokens": 82542, "cache_type": "assistant", "active_gb": 9.132, "cache_gb": 1.041, "peak_gb": 9.834, "hits": 87000, "misses": 25637}
