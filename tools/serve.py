@@ -99,6 +99,7 @@ def patch_server(server, cfg):
 
         row = dict(event=event, t=round(time.time(), 2), **kw, active_gb=round(mx.get_active_memory() / 1e9, 3),
                    cache_gb=round(mx.get_cache_memory() / 1e9, 3), peak_gb=round(mx.get_peak_memory() / 1e9, 3))
+        row["live_kv"] = live_kv()
         if TIER:  # the served model; cumulative, so a request's hit rate is the difference of its two rows
             from moestream.layer import stream_stats
 
@@ -181,6 +182,29 @@ def patch_server(server, cfg):
         return r
 
     server.ResponseGenerator._next_request = _next_request
+
+
+def live_kv():
+    """Every KV cache object alive in the process, by type: count and bytes. Diagnostic for the
+    memory log: finds copies held outside the prompt cache and the tier (a gc scan, a few ms)."""
+    import gc
+
+    from mlx_lm.models.cache import _BaseCache
+
+    out = {}
+    with warnings.catch_warnings():  # isinstance on some lazy modules (torch) warns
+        warnings.simplefilter("ignore")
+        objs = [o for o in gc.get_objects() if isinstance(o, _BaseCache)]
+    for o in objs:
+        if True:
+            try:
+                n = o.nbytes
+            except Exception:
+                n = 0
+            t = out.setdefault(type(o).__name__, {"n": 0, "bytes": 0})
+            t["n"] += 1
+            t["bytes"] += n
+    return out
 
 
 def cap_buffer_pool(gb):

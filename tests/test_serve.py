@@ -313,3 +313,19 @@ def test_the_memory_log_shows_ram_cache_entries_and_bytes(tmp_path, monkeypatch)
     _turn(model, LRU(6), T1)
     rows = [json.loads(l) for l in log.read_text().splitlines()]
     assert rows[1]["ram_entries"] == 1 and rows[1]["ram_bytes"] > 0 and "tier_jobs" in rows[1]
+
+
+def test_the_memory_log_counts_every_live_kv_cache_by_type(tmp_path, monkeypatch):
+    import json
+
+    from mlx_lm.models.cache import KVCache
+
+    log = tmp_path / "mem.log"
+    monkeypatch.setenv("MOESTREAM_MEMLOG", str(log))
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    stray = [KVCache()]                                   # a cache nothing in the server knows about
+    stray[0].update_and_fetch(*[__import__("mlx.core").core.zeros((1, 2, 300, 8))] * 2)
+    _turn(model, LRU(6), T1)
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    live = rows[-1]["live_kv"]
+    assert live["KVCache"]["n"] >= 1 and live["KVCache"]["bytes"] >= stray[0].nbytes
