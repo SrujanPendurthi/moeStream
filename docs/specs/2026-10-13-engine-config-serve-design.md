@@ -15,7 +15,11 @@ changing a setting in the file changes what the engine does.
 This is sub-project 1 of the roadmap (speed gate, **engine**, parity eval, control UI,
 self-tuning, refine loop). It assumes sub-project 0's revised gate passes: at the 20 GB cap,
 with lagunaLab given the same slot memory, moeStream is within about 10% on short-prompt decode
-and faster on 16k-context decode and prefill (see README). If a fix changes how slots are
+and faster on 16k-context decode and prefill (see README). Superseded (2026-10-14, the user): that
+result was measured with MLX's buffer pool uncapped. With both pools capped at 1 GB at 14.4 GB the
+engines are at parity (short decode 1.01x, 16k decode 1.04x, prefill 0.81x), and the gate is that
+parity plus the SSD tier (3.7x less prompt work, 2.8x faster on three interleaved sessions,
+restart and `kill -9` safe); README "Where it stands". If a fix changes how slots are
 stored, only `layer.py` internals move, not anything below.
 
 ## Not in scope

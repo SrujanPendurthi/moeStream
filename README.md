@@ -16,7 +16,31 @@ PYTHONPATH=.:../lagunaLab python3 -m tools.bench --cold  # cold page cache -> re
 
 `record` and `bench` load real weights; check no other heavy job is running first.
 
-## Results (warm, `results/bench.json`)
+## Where it stands (2026-10-14)
+
+Measured, and what the gate now is. Every speed number taken with MLX's buffer pool uncapped is
+superseded: the uncapped pool evicted expert files from the page cache (lagunaLab 9c35d6e) and
+handicapped whichever engine it hit. moeStream now caps the pool at 1 GB by default
+(`mlx_cache_gb`).
+
+**Speed: parity at equal memory.** 14.4 GB cap, both engines' pools capped at 1 GB
+(`results/bench_cap14.4_pool1.json`):
+
+| | lagunaLab (157 slots) | moeStream | ratio |
+|---|---|---|---|
+| short-prompt decode | 17.20 tok/s | 17.31 tok/s | 1.01x |
+| 16k decode | 13.20 tok/s | 13.74 tok/s | 1.04x |
+| 16k prefill | 131.6 tok/s | 106.9 tok/s | 0.81x |
+
+moeStream is not faster than lagunaLab per token; prefill is 19% slower.
+
+**Multi-turn: the SSD tier.** On three interleaved agent sessions (15 turns, `results/kvtier/`),
+restoring each conversation's KV from SSD instead of re-processing it cut prompt work 3.7x
+(135,132 to 36,358 tokens, the minimum possible) and wall time 2.8x (1,478 s to 519 s). The tier
+survives a server restart (3 of 3 sessions restored) and `kill -9` mid-write (torn snapshot dropped,
+nothing orphaned), and a disk restore gives the same output as a RAM hit. Details below.
+
+## Results (warm, `results/bench.json`, superseded: uncapped pool, Phase 1)
 
 | | lagunaLab slots=32 | moeStream |
 |---|---|---|
@@ -36,7 +60,7 @@ moeStream time split per token: sync 145.1 ms, read 10.3 ms, write 4.1 ms. Predi
 
 Note on 1: on 3 prompts x 128 tokens, outputs first diverge at tokens 19, 104 and 26, where the top-2 logit gap is 0 to 0.375 (about one bf16 step). Consistent with the bf16 near-tie explanation in lagunaLab's `streaming.json`; not verified per-step.
 
-## Results (cold page cache, `results/bench_cold.json`)
+## Results (cold page cache, `results/bench_cold.json`, superseded: uncapped pool, Phase 1)
 
 | | lagunaLab slots=32 | moeStream |
 |---|---|---|
@@ -47,7 +71,7 @@ Note on 1: on 3 prompts x 128 tokens, outputs first diverge at tokens 19, 104 an
 
 moeStream time split per token: sync 206.4 ms, read 7.9 ms, write 3.2 ms. `speedup_vs_lagunaLab` 0.306 (fail), `ctx_decode_ratio` 0.702 (fail, warm passes), `identical_to_lagunaLab` false.
 
-## Speed gate (sub-project 0, `results/bench_slots*.json`, `results/bench_evalwrites.json`)
+## Speed gate (sub-project 0, `results/bench_slots*.json`, `results/bench_evalwrites.json`, superseded: uncapped pool)
 
 The Phase 1 conclusion above ("build zero-copy Metal") was wrong. `sync_ms_per_tok` timed `mx.eval` on the lazy graph, so it included the slot writes queued before it. With writes forced into their own timer (`--eval-writes`) at the calibrated 128-256 slots and a 16.08 GB peak, writes took 140 ms per token, about 5.5 ms per fill. The same write path on a synthetic real-shaped layer costs 0.10-0.28 ms per fill at 32, 128 and 256 slots, so writes do not copy the slot tensor. The slowdown was memory pressure: swap was in use, and `budget.probe` counts inactive pages as free.
 
@@ -62,7 +86,9 @@ Each row below comes from a single run with its own lagunaLab baseline. The base
 
 At 128 slots and 12.8 GB, moeStream is 0.90-0.94x lagunaLab on short-prompt decode, 1.37-1.43x on 16k-context decode, and about 1.5x on prefill. Lookahead prefetch roughly breaks even. It hides about 10 ms of reads but adds about 18 ms of sync per token.
 
-## Gate (revised 2026-10-13)
+## Gate history
+
+The gate is now the measured result in "Where it stands" above. The text below is how it got there.
 
 The original gate ("decode >= lagunaLab at equal or lower memory" against lagunaLab at 32 slots) is replaced. New gate, at the 20 GB cap, with lagunaLab given the same slot memory (`tools.bench --cap-gb 20`):
 
@@ -76,7 +102,7 @@ Data so far was measured at **unequal memory** (lagunaLab 32 slots, 5.9 GB; moeS
 
 **20 GB cap (`results/bench_cap20.log`): aborted, thrashing after about 35 min, no moeStream result.** lagunaLab's half finished but collapsed: 239 slots, 15.7 tok/s short decode, 16k prefill 51.9 tok/s, 16k decode **0.16 tok/s**, peak GPU 20.9 GB. moeStream then loaded 9280 slots (16.4 GB) and sat paging (process state stuck, about 8% CPU, 86M pageins, footprint about 18 GB) without tripping the watchdog (swap 2.4 GB, under its 8 GB limit), so it was killed by PID. Watchdog peaks for the run: swap 3510 MB, footprint 20480 MB. A 20 GB cap is not usable on this 24 GB machine.
 
-**14.4 GB cap (`results/bench_cap14.4.json`), the run the verdict rests on:**
+**14.4 GB cap (`results/bench_cap14.4.json`), superseded: lagunaLab ran with its pool uncapped:**
 
 | | lagunaLab (157 slots) | moeStream (128-256 slots per layer) | ratio |
 |---|---|---|---|
@@ -88,7 +114,7 @@ Data so far was measured at **unequal memory** (lagunaLab 32 slots, 5.9 GB; moeS
 
 Watchdog peaks for the whole run (both engines, one process): swap 160 MB, footprint 15360 MB.
 
-Gate: **passes at 14.4 GB**, with short-prompt decode at the edge of item 1 (10.0% slower). Items 2 and 3 pass. The footprint is about 1.2 GB above moeStream's peak GPU: the prefetcher's staging buffers (numpy, up to 16 free expert-sized buffers per layer, plus those in flight) live outside the GPU budget and are not counted in `memory_gb`. moeStream decode time per token: sync 53 ms, read 8.7 ms, write 3.9 ms.
+Gate (superseded): passed at 14.4 GB, with short-prompt decode at the edge of item 1 (10.0% slower). Items 2 and 3 pass. The footprint is about 1.2 GB above moeStream's peak GPU: the prefetcher's staging buffers (numpy, up to 16 free expert-sized buffers per layer, plus those in flight) live outside the GPU budget and are not counted in `memory_gb`. moeStream decode time per token: sync 53 ms, read 8.7 ms, write 3.9 ms.
 
 **14.4 GB cap, both buffer pools capped at 1 GB (`results/bench_cap14.4_pool1.json`, 2026-10-14):** lagunaLab found that MLX's uncapped free-buffer pool evicts expert files from the page cache (its 9c35d6e), which had handicapped its side of the run above. Re-run with `--cache-limit-gb 1` for both engines:
 
@@ -102,9 +128,9 @@ Gate: **passes at 14.4 GB**, with short-prompt decode at the edge of item 1 (10.
 
 Watchdog peaks: swap 533 MB, footprint 15360 MB. moeStream decode time per token: sync 39 ms, read 8.1 ms, write 2.6 ms.
 
-Gate with both pools capped: **not met as written**. Short decode passes (1.01x), 16k decode is a small win (1.04x), 16k prefill loses (0.81x). The earlier long-context margins came mostly from lagunaLab's uncapped pool, not from moeStream. The pool cap helps both engines (moeStream short decode 12.68 to 17.31 tok/s), so it should become moeStream's default too; today it is only on with `MOESTREAM_SHARED=1`.
+Gate with both pools capped: **not met as written**. Short decode passes (1.01x), 16k decode is a small win (1.04x), 16k prefill loses (0.81x). The earlier long-context margins came mostly from lagunaLab's uncapped pool, not from moeStream. The pool cap helps both engines (moeStream short decode 12.68 to 17.31 tok/s), and is now moeStream's default (`mlx_cache_gb = 1.0`). Gate rewritten to this result (2026-10-14, the user): equal-memory parity plus the SSD tier, see "Where it stands".
 
-Consequence: the `memory_gb = 20.0` default in `moestream.toml` should come down to about 14. At 14 GB with q8 KV at 128k, the budget reserves KV for two sessions (2 x 2.85 GB), so the slots get 6.12 GB (64-128 per layer).
+Consequence (done: `memory_gb = 14.0`): the `memory_gb = 20.0` default in `moestream.toml` should come down to about 14. At 14 GB with q8 KV at 128k, the budget reserves KV for two sessions (2 x 2.85 GB), so the slots get 6.12 GB (64-128 per layer).
 
 
 Sub-project 1 (`docs/specs/2026-10-13-engine-config-serve-design.md`) adds the explicit memory cap in place of the free-page probe.

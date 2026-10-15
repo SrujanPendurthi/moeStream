@@ -34,8 +34,8 @@ Measured results (benchmarks, the speed gate, the pi check) live in the top-leve
 
 | Sub-project | State |
 |---|---|
-| 0. Speed gate | passed at a 14.4 GB cap: equal-memory decode 0.90x lagunaLab short-prompt, 1.24x at 16k, prefill 1.05x |
+| 0. Speed gate | rewritten to what is measured: parity with lagunaLab at 14.4 GB, both MLX buffer pools capped at 1 GB (short decode 1.01x, 16k decode 1.04x, prefill 0.81x); the earlier uncapped numbers are superseded |
 | 1. Engine config, server, pi | done: multi-turn pi session with tool calls verified at 14 GB |
-| 4. Self-tuning (system level) | built and tested; real-weight verification in progress |
+| 4. Self-tuning (system level) | built and tested; its real-weight gate is not met, so it ships off (`tune = false`). SSD tier for the prompt cache: verified on real weights, 3.7x less prompt work and 2.8x faster on three interleaved sessions |
 | 2. Custom harness and eval | next; needs its own spec |
 | 3. Control UI, 6. GRPO training, 5. Refine loop | later |
