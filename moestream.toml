@@ -15,3 +15,4 @@ kv_tier = true            # SSD tier for the prompt cache: restore a conversatio
 kv_dir = "kvcache"        # its directory (git-ignored)
 kv_disk_gb = 10.0         # whole conversations pruned, oldest use first, above this
 mlx_cache_gb = 1.0        # cap on MLX's free-buffer pool; 0 = MLX default (uncapped)
+lookahead = false         # next-layer prefetch while decoding: off, ~11% slower at 32k when on and never a measured win (docs/long-context.md)

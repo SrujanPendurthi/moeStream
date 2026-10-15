@@ -73,3 +73,11 @@ def test_cap_below_fixed_costs_raises_listing_each_term():
 def test_probe_budget_counts_kv_bits():
     assert slot_budget_bytes(30 * GB, 20 * GB, 1 * GB, target_ctx=1000, kv_bits=8) == \
         20 * GB - (1 * GB + kv_bytes_per_token(8) * 1000 + 1 * GB)
+
+
+def test_activation_reserve_grows_with_the_context():
+    from moestream.budget import activation_bytes
+
+    assert activation_bytes(0) == int(1.3 * GB)
+    assert activation_bytes(131072) == int(1.3 * GB + 0.021 * GB * 131.072)   # ~4.05 GB at 128k
+    assert activation_bytes(32768) < activation_bytes(131072)

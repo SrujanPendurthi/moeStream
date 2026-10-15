@@ -237,9 +237,10 @@ def test_load_from_config_file(packed, tmp_path, monkeypatch):
 def test_config_load_reserves_kv_for_the_live_and_one_stored_session(packed, tmp_path, monkeypatch):
     out, _ = packed
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
-    # 3 GB covers resident + 1 GB activations + one 32k-token bf16 KV (1.34 GB), not two
+    # 3.5 GB covers resident + activations (1.3 + 0.021 x 32.768 = 1.99 GB) + one 32k-token bf16 KV
+    # (1.34 GB), not two
     with pytest.raises(ValueError, match="KV"):
-        load(EngineConfig(pack_dir=str(out), memory_gb=3.0, kv_bits=0, context_tokens=32768))
+        load(EngineConfig(pack_dir=str(out), memory_gb=3.5, kv_bits=0, context_tokens=32768))
 
 
 def test_resize_between_tokens_keeps_decode_bit_exact(tmp_path):
@@ -359,13 +360,23 @@ def test_prefill_chunks_evaluated_as_mlx_lm_does_do_not_pile_up_slot_writes(pack
 def test_kv_sessions_1_reserves_kv_for_the_live_session_only(packed, monkeypatch):
     out, _ = packed
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
-    load(EngineConfig(pack_dir=str(out), memory_gb=3.0, kv_bits=0, context_tokens=32768, kv_sessions=1))
+    load(EngineConfig(pack_dir=str(out), memory_gb=3.5, kv_bits=0, context_tokens=32768, kv_sessions=1))
+
+
+def test_config_load_reserves_activations_by_context_and_says_so(packed, monkeypatch, capsys):
+    out, _ = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
+    # 3.3 GB covered the flat 1 GB reserve plus one 32k bf16 KV; the context-dependent 1.99 GB does not
+    with pytest.raises(ValueError, match="activations 1.99 GB"):
+        load(EngineConfig(pack_dir=str(out), memory_gb=3.3, kv_bits=0, context_tokens=32768, kv_sessions=1))
+    load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=32768))
+    assert "activations 1.99 GB" in capsys.readouterr().err
 
 
 def test_lookahead_false_turns_lookahead_off_on_every_layer(packed, monkeypatch):
     out, _ = packed
     monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
-    m, _ = load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=1024, lookahead=False))
+    m, _ = load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=1024))   # default: off
     assert all(not moe.io.lookahead for moe in _moe(m))
     assert all(moe.io.lookahead for moe in _moe(load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0,
-                                                                   context_tokens=1024))[0]))
+                                                                   context_tokens=1024, lookahead=True))[0]))

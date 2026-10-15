@@ -16,7 +16,7 @@ PYTHONPATH=.:../lagunaLab python3 -m tools.bench --cold  # cold page cache -> re
 
 `record` and `bench` load real weights; check no other heavy job is running first.
 
-## Where it stands (2026-10-14)
+## Where it stands (2026-10-15)
 
 Measured, and what the gate now is. Every speed number taken with MLX's buffer pool uncapped is
 superseded: the uncapped pool evicted expert files from the page cache (lagunaLab 9c35d6e) and
@@ -39,6 +39,19 @@ restoring each conversation's KV from SSD instead of re-processing it cut prompt
 (135,132 to 36,358 tokens, the minimum possible) and wall time 2.8x (1,478 s to 519 s). The tier
 survives a server restart (3 of 3 sessions restored) and `kill -9` mid-write (torn snapshot dropped,
 nothing orphaned), and a disk restore gives the same output as a RAM hit. Details below.
+
+**Long sessions (2026-10-15, `docs/long-context.md`).** An 81k-token agent session runs at
+`memory_gb = 14` with q8 KV: 13.0 GB footprint, prefill 59.8 tok/s, decode 3.1-3.3 tok/s, and after a
+restart the SSD tier restores the 82k-token conversation in 0.75 s instead of a ~22-minute prefill.
+Fixed on the way: prefill memory grew ~0.4 GB per chunk (pending slot writes, f357884), and the
+tier writer pinned a turn's KV (c8f5b72). At 32k with 64 slots, the decode gap to lagunaLab was two
+settings, not the engine: q8 KV's dequantize (~42 ms per token) and lookahead prefetch (~20 ms); with
+bf16 KV and lookahead off moeStream is within 4% of lagunaLab (113.3 vs 108.8 ms).
+
+**Defaults since 2026-10-15** (the user's decision): lookahead off; KV stays q8; the activation
+reserve is 1.3 GB + 0.021 GB per 1k context tokens instead of a flat 1 GB, which halves the default's
+slots at 128k (6.12 to 3.09 GB) unless `kv_sessions = 1`; bf16 KV at 81k fits at `memory_gb = 12`
+with `release_evicted_caches = true` (opt-in).
 
 ## Results (warm, `results/bench.json`, superseded: uncapped pool, Phase 1)
 

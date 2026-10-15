@@ -84,8 +84,6 @@ def patch_server(server, cfg):
     slice of tuner work whenever the generation thread polls an empty request queue."""
     lru = server.LRUPromptCache
     server.load = make_loader(cfg)
-    if cfg.release_merged_caches:
-        release_merged_caches()
     if cfg.release_evicted_caches:
         print("moeStream: release_evicted_caches on: caches the prompt cache drops are emptied", file=sys.stderr)
     if os.environ.get("MOESTREAM_PREFILL_SET") == "1":  # experimental, off by default (docs/prefill-memory.md)
@@ -240,28 +238,6 @@ def release_evicted(trie):
         return prev
 
     trie.pop, trie.add = _pop, _add
-
-
-def release_merged_caches():
-    """mlx-lm's batched path (caches that can merge, i.e. bf16 KV) copies a request's fetched cache
-    into its batch, then keeps the original bound until the next request: a second KV copy between
-    turns (results/longctx_bf16_fix12). Empty the originals once merged: nothing reads them again,
-    and the prompt cache hands out deep copies, so its entries are never the ones emptied. The
-    single path (q8 KV) never merges and is untouched."""
-    import importlib
-
-    gen = importlib.import_module("mlx_lm.generate")  # the package's `generate` name is the function
-    merge = gen._merge_caches
-
-    def _merge_caches(caches):
-        out = merge(caches)
-        for layers in caches:
-            _empty(layers)
-        return out
-
-    gen._merge_caches = _merge_caches
-    print("moeStream: release_merged_caches on: fetched caches are emptied once mlx-lm merges them",
-          file=sys.stderr)
 
 
 def cap_buffer_pool(gb):

@@ -80,7 +80,8 @@ def test_mlx_buffer_pool_cap_defaults_to_1_gb(tmp_path):
 
 def test_lookahead_and_kv_sessions_default_to_todays_behaviour(tmp_path):
     c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
-    assert c.lookahead is True and c.kv_sessions == 2
+    assert c.lookahead is False and c.kv_sessions == 2            # lookahead off since 2026-10-15
+    assert EngineConfig.read(REPO / "moestream.toml").lookahead is False
 
 
 @pytest.mark.parametrize("line", ["tune = 1", "trace_tokens = 0", "tuning_dir = 3"])

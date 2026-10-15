@@ -331,24 +331,6 @@ def test_the_memory_log_counts_every_live_kv_cache_by_type(tmp_path, monkeypatch
     assert live["KVCache"]["n"] >= 1 and live["KVCache"]["bytes"] >= stray[0].nbytes
 
 
-def _merge_setup(monkeypatch, **cfg):
-    """patch_server with these settings; mlx-lm's _merge_caches restored after the test."""
-    from types import SimpleNamespace
-
-    import importlib
-
-    from mlx_lm.models.cache import LRUPromptCache
-
-    import tools.serve as serve
-
-    gen = importlib.import_module("mlx_lm.generate")   # the package's `generate` name is the function
-    monkeypatch.setattr(gen, "_merge_caches", gen._merge_caches)
-    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None,
-                             ResponseGenerator=type("RG", (), {"_next_request": lambda self, timeout=None: None}))
-    serve.patch_server(server, EngineConfig(pack_dir="/p", **cfg))
-    return gen
-
-
 def _kv_pair(n, seed):
     import mlx.core as mx
     from mlx_lm.models.cache import KVCache, RotatingKVCache
@@ -358,52 +340,6 @@ def _kv_pair(n, seed):
     full.update_and_fetch(k, k)
     sliding.update_and_fetch(k, k)
     return [full, sliding]
-
-
-def test_release_merged_caches_empties_the_sources_and_keeps_the_merged_batch(monkeypatch):
-    import mlx.core as mx
-
-    gen = _merge_setup(monkeypatch, release_merged_caches=True)
-    src = _kv_pair(5, 0)
-    want = [mx.array(src[0].keys[:, :, :5]), mx.array(src[1].keys)]
-    merged = gen._merge_caches([src])
-    assert all(c.keys is None and c.values is None for c in src)          # the source arrays are let go
-    assert mx.array_equal(merged[0].keys[:, :, -5:], want[0]).item()     # left-padded batch: data at the end
-    assert merged[0].offset.tolist() == [5] or int(mx.max(merged[0].offset)) == 5
-
-
-def test_release_merged_caches_off_leaves_mlx_lm_as_it_is(monkeypatch):
-    import importlib
-
-    gen = importlib.import_module("mlx_lm.generate")
-
-    orig = gen._merge_caches
-    _merge_setup(monkeypatch)
-    assert gen._merge_caches is orig
-
-
-def test_release_merged_caches_leaves_the_prompt_cache_entry_and_the_tier_alone(tmp_path, monkeypatch):
-    import importlib
-
-    gen = importlib.import_module("mlx_lm.generate")
-
-    import tools.serve as serve
-
-    monkeypatch.setattr(gen, "_merge_caches", gen._merge_caches)
-    model, LRU = _tiered(tmp_path, monkeypatch, release_merged_caches=True)
-    ram = LRU(6)
-    _, out, _ = _turn(model, ram, T1)
-    cache, _ = ram.fetch_nearest_cache("k", T1 + out)          # a RAM hit: a deep copy of the entry
-    gen._merge_caches([cache])                                   # mlx-lm merges it into a batch
-    serve.TIER[0][0].flush()
-    t2 = T1 + out + T2[30:]
-    assert _turn(model, ram, t2)[0] == len(T2) - 30              # the stored entry still serves turn 2
-    assert _turn(model, LRU(6), t2)[0] == len(T2) - 30           # and the SSD snapshot still restores
-
-
-def test_release_merged_caches_says_so_at_startup(monkeypatch, capsys):
-    _merge_setup(monkeypatch, release_merged_caches=True)
-    assert "release_merged_caches on" in capsys.readouterr().err
 
 
 def _lru_with(tmp_path, monkeypatch, **cfg):

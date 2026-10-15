@@ -37,10 +37,9 @@ class EngineConfig:
     kv_dir: str = "kvcache"
     kv_disk_gb: float = 10.0
     mlx_cache_gb: float = 1.0
-    lookahead: bool = True
+    lookahead: bool = False
     kv_sessions: int = 2
     prompt_cache_entries: int = 6
-    release_merged_caches: bool = False
     release_evicted_caches: bool = False
 
     @classmethod
@@ -81,7 +80,6 @@ class EngineConfig:
             "lookahead": isinstance(self.lookahead, bool),
             "kv_sessions": _int(self.kv_sessions) and self.kv_sessions >= 1,
             "prompt_cache_entries": _int(self.prompt_cache_entries) and self.prompt_cache_entries >= 1,
-            "release_merged_caches": isinstance(self.release_merged_caches, bool),
             "release_evicted_caches": isinstance(self.release_evicted_caches, bool),
         }
         for key, ok in rules.items():

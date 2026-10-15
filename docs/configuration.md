@@ -24,11 +24,10 @@ directory. Unknown keys and wrongly typed values are errors at startup, never si
 | `kv_tier` | true | SSD tier for the prompt cache: turn-end KV snapshots on disk, restored instead of re-processing a prompt ([serving.md](serving.md#ssd-tier)) |
 | `kv_dir` | `"kvcache"` | the tier's directory (git-ignored); a non-empty directory without the tier's `FORMAT` file is refused, never wiped |
 | `kv_disk_gb` | 10.0 | disk cap; above it whole conversations are deleted, least recently used first |
-| `lookahead` | true | next-layer lookahead prefetch while decoding (the tuner can turn it off per layer); false turns it off everywhere. Measured at 32k / 64 slots: ~20 ms per token slower with it on (docs/long-context.md) |
+| `lookahead` | false | next-layer lookahead prefetch while decoding. Off since 2026-10-15: at 32k / 64 slots it made decode ~11% slower (186.5 vs 166.0 ms per token) and run-to-run timing noisy, and it was never measured as a win (docs/long-context.md). true turns it on (the tuner can then turn it off per layer) |
 | `kv_sessions` | 2 | sessions of `context_tokens` KV the memory budget reserves: the live one plus one stored conversation; 1 leaves stored conversations to the SSD tier |
 | `prompt_cache_entries` | 6 | conversations mlx-lm's RAM prompt cache keeps (its `--prompt-cache-size`; its byte cap is one session of KV either way); 1 leaves the rest to the SSD tier |
-| `release_merged_caches` | false | on mlx-lm's batched path (bf16 KV), empty a request's fetched cache once it is merged into the batch, so one KV copy less is held between turns; logs a line at startup when on. Experimental (docs/long-context.md) |
-| `release_evicted_caches` | false | empty a cache entry's arrays when the RAM prompt cache drops it, so a reference mlx-lm still holds (its batched path's end-of-prompt cache) does not keep a full KV copy; logs a line at startup when on. Experimental (docs/long-context.md) |
+| `release_evicted_caches` | false | empty a cache entry's arrays when the RAM prompt cache drops it, so a reference mlx-lm still holds (its batched path's end-of-prompt cache) does not keep a full KV copy; logs a line at startup when on. Opt-in, for bf16 KV only (`kv_bits = 0`): it let an 81k session fit at `memory_gb = 12` (docs/long-context.md) |
 | `mlx_cache_gb` | 1.0 | cap on MLX's pool of freed buffers kept for reuse; 0 = MLX's default (no cap). Uncapped, the pool grows past `memory_gb` and pushes expert files out of the page cache; capped, decode is faster too (short decode 12.7 to 17.3 tok/s at 14.4 GB, README) |
 
 Environment variables for the server: `MOESTREAM_SHARED=1` drops mlx-lm's wired-memory limit, for a
@@ -53,25 +52,33 @@ kv_tier = true
 kv_dir = "kvcache"
 kv_disk_gb = 10.0
 mlx_cache_gb = 1.0
+lookahead = false
 ```
 
 ## What fits: worked examples
 
-Fixed costs: resident weights 1.16 GB, activations 1 GB. KV is reserved for two sessions of
-`context_tokens` (the live one and one stored in the prompt cache). One slot is 1.77 MB; there are 39
-MoE layers with a floor of 16 slots each (624 slots, 1.10 GB).
+Fixed costs: resident weights 1.16 GB and the prefill activation reserve, **1.3 GB + 0.021 GB per 1k
+tokens of `context_tokens`** (1.99 GB at 32k, 4.05 GB at 128k; measured, docs/prefill-memory.md; the
+load banner prints it). KV is reserved for `kv_sessions` sessions of `context_tokens` (default two: the
+live one and one stored in the prompt cache). One slot is 1.77 MB; there are 39 MoE layers with a
+floor of 16 slots each (624 slots, 1.10 GB).
 
-| `memory_gb` | `context_tokens` | `kv_bits` | KV reserved | Slots | Per layer | Notes |
+| `memory_gb` | `context_tokens` | `kv_bits` | `kv_sessions` | KV reserved | Slots | Notes |
 |---|---|---|---|---|---|---|
-| 14 | 131072 | 8 | 5.70 GB | 3456 (6.12 GB) | 64-128 | the default; verified with pi |
-| 14 | 131072 | 0 | 10.74 GB | 624 (floor) | 16 | bf16 KV at 128k leaves no room; decode about half as fast |
-| 14 | 32768 | 8 | 1.43 GB | about 5900 | up to 256 | shorter sessions, more experts cached |
-| 20 | 131072 | 8 | 5.70 GB | about 6860 | | **thrashes on a 24 GB Mac**: do not use |
+| 14 | 131072 | 8 | 2 | 5.70 GB | 1744 (3.09 GB) | the default |
+| 14 | 131072 | 8 | 1 | 2.85 GB | 3356 (5.94 GB) | other conversations live in the SSD tier |
+| 14 | 131072 | 0 | 2 | 10.74 GB | load fails | bf16 KV at 128k with two sessions does not fit |
+| 14 | 131072 | 0 | 1 | 5.37 GB | 1934 (3.42 GB) | bf16: faster decode at long context; see `release_evicted_caches` |
+| 14 | 32768 | 8 | 2 | 1.43 GB | 5329 (9.43 GB) | shorter sessions, more experts cached |
+| 20 | 131072 | 8 | 2 | 5.70 GB | | **thrashes on a 24 GB Mac**: do not use |
+
+Before 2026-10-15 the reserve was a flat 1 GB, which gave the default 6.12 GB of slots; the measured
+81k session at that setting used 13.0 GB of footprint (docs/long-context.md).
 
 Rules of thumb:
 
-- **Peak footprint is about `memory_gb + 1.2 GB`** (the prefetcher's staging buffers are outside the
-  budget). Keep it at least 6-8 GB under physical memory, or macOS starts paging and decode collapses.
+- **Peak footprint runs 1.5-3.5 GB above MLX's own peak** (MLX's buffer pool and the prefetcher's
+  staging buffers are outside the budget). Keep it at least 6-8 GB under physical memory, or macOS starts paging and decode collapses.
   On the 24 GB machine, 14 GB is measured safe with a browser open; 20 GB is not.
 - **q8 KV is the right trade at long context.** At 128k, bf16 KV costs 5 GB more than q8, all of
   which comes out of the expert cache.

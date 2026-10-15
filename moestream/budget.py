@@ -12,6 +12,12 @@ def kv_bytes_per_token(bits=0):
     return KV_BYTES_PER_TOKEN * KV_STORED[bits] // 256
 
 
+def activation_bytes(context_tokens):
+    """Prefill transient reserve: 1.3 GB + 0.021 GB per 1k tokens of one session's context, measured at
+    prefill step 2048 (results/prefill_mem_fixed.json; docs/prefill-memory.md). ~4.05 GB at 128k."""
+    return int(1.3 * GB + 0.021 * GB * context_tokens / 1000)
+
+
 def parse_vm_stat(text):
     page = int(re.search(r"page size of (\d+) bytes", text).group(1))
     pages = {m.group(1): int(m.group(2)) for m in re.finditer(r"Pages (\w+):\s+(\d+)\.", text)}
