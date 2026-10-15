@@ -39,6 +39,7 @@ class EngineConfig:
     mlx_cache_gb: float = 1.0
     lookahead: bool = True
     kv_sessions: int = 2
+    prompt_cache_entries: int = 6
 
     @classmethod
     def read(cls, path):
@@ -77,6 +78,7 @@ class EngineConfig:
             "mlx_cache_gb": _num(self.mlx_cache_gb) and self.mlx_cache_gb >= 0,
             "lookahead": isinstance(self.lookahead, bool),
             "kv_sessions": _int(self.kv_sessions) and self.kv_sessions >= 1,
+            "prompt_cache_entries": _int(self.prompt_cache_entries) and self.prompt_cache_entries >= 1,
         }
         for key, ok in rules.items():
             if not ok:

@@ -285,3 +285,31 @@ def test_prefill_set_env_turns_on_the_layer_flag(tmp_path, monkeypatch):
     monkeypatch.setenv("MOESTREAM_PREFILL_SET", "1")
     _tiered(tmp_path, monkeypatch)
     assert layer.PREFILL_SET is True
+
+
+def test_prompt_cache_entries_sets_mlx_lms_prompt_cache_size():
+    assert _flag(server_argv(EngineConfig(pack_dir="/p", prompt_cache_entries=1)), "--prompt-cache-size") == "1"
+
+
+def test_a_one_entry_ram_cache_still_saves_every_turn_and_restores_from_ssd(tmp_path, monkeypatch):
+    import tools.serve as serve
+
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    ram = LRU(1)
+    _, out, _ = _turn(model, ram, T1)
+    other = list(range(300, 340))
+    _turn(model, ram, other)                                  # pushes conversation 1 out of RAM
+    serve.TIER[0][0].flush()
+    t2 = T1 + out + T2[30:]
+    assert _turn(model, ram, t2)[0] == len(T2) - 30           # turn 2 restored from SSD
+
+
+def test_the_memory_log_shows_ram_cache_entries_and_bytes(tmp_path, monkeypatch):
+    import json
+
+    log = tmp_path / "mem.log"
+    monkeypatch.setenv("MOESTREAM_MEMLOG", str(log))
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    _turn(model, LRU(6), T1)
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    assert rows[1]["ram_entries"] == 1 and rows[1]["ram_bytes"] > 0 and "tier_jobs" in rows[1]

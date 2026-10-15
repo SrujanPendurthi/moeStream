@@ -26,7 +26,7 @@ def session_kv_bytes(cfg):
 def server_argv(cfg):
     return [
         "--model", str(cfg.pack_dir), "--port", str(cfg.port), "--max-tokens", "4096",
-        "--prompt-cache-size", "6",
+        "--prompt-cache-size", str(cfg.prompt_cache_entries),
         "--prompt-cache-bytes", str(session_kv_bytes(cfg)),
         # the memory budget reserves KV for one live session (plus one stored), not one per client
         "--decode-concurrency", "1", "--prompt-concurrency", "1",
@@ -118,9 +118,14 @@ def patch_server(server, cfg):
         def __init__(self, max_size):
             super().__init__(max_size, max_bytes=session_kv_bytes(cfg))
 
+        def _held(self):  # what the RAM cache and the tier writer hold, for the memory log
+            st = TIER[0][0] if TIER else None
+            return dict(ram_entries=len(self._lru), ram_bytes=self._n_bytes,
+                        tier_jobs=(len(st.pending) + st.busy) if st else 0)
+
         def fetch_nearest_cache(self, model, tokens):
             cache, rest = self._fetch(model, tokens)
-            mem("fetch", prompt_tokens=len(tokens), reused=len(tokens) - len(rest))
+            mem("fetch", prompt_tokens=len(tokens), reused=len(tokens) - len(rest), **self._held())
             return cache, rest
 
         def _fetch(self, model, tokens):
@@ -155,7 +160,7 @@ def patch_server(server, cfg):
 
         def insert_cache(self, model, tokens, prompt_cache, *, cache_type="assistant"):
             super().insert_cache(model, tokens, prompt_cache, cache_type=cache_type)
-            mem("insert", tokens=len(tokens), cache_type=cache_type)
+            mem("insert", tokens=len(tokens), cache_type=cache_type, **self._held())
             if TIER and cache_type == "assistant":  # turn ends only; mid-prompt segments are not restorable points
                 try:
                     TIER[0][0].save(tokens, prompt_cache)
