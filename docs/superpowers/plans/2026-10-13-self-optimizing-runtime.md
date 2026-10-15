@@ -1833,3 +1833,103 @@ Pass: last tok/s > first, last hit rate ≥ first, every kept math-changing tria
 - [ ] **Step 6: Restart check.** Start the server again, drive 10 minutes; first windows' median tok/s within 5% of the previous run's last windows. Kill by PID.
 
 - [ ] **Step 7: README** — add a "Self-tuning" section: what it tunes, the KL thresholds, `tune`/`tuning_dir`/`trace_tokens`, the measured first/last numbers and kept trials. Commit `README.md results/tune_*.log` ("docs: self-tuning verification numbers"). Report to the coordinator.
+
+---
+
+## Part 2: SSD tier for the prompt cache (Tasks 11-18)
+
+**Spec:** `docs/specs/2026-10-14-ssd-kv-tier-design.md` (draft, waiting for the user's review). The
+spec is the authority for formats, defaults and behaviour; these tasks only cut it into reviewable
+pieces and are not copied from it.
+
+**Status:** structure only. Each task names its files, interfaces and tests; the step code is written
+once the user has reviewed the spec. No task starts before that review.
+
+**Global constraints (additional):** everything under Global Constraints above; no writes outside
+`kv_dir`; no extra KV copy in memory (a restore takes the place of the RAM-hit deep copy); every
+disk write is temp file + `fsync` + atomic rename; tiny-model tests use a sliding window smaller than
+the test prompts so the rotating buffer wraps.
+
+### Task 11: Config keys for the SSD tier
+
+**Files:** Modify `moestream/config.py`, `moestream.toml`, `.gitignore`; Test `tests/test_config.py`
+
+**Interfaces:**
+- Produces: `EngineConfig.kv_tier: bool = True`, `kv_dir: str = "kvcache"` (resolved against the TOML's directory), `kv_disk_gb: float = 10.0` (> 0).
+
+- [ ] Write failing tests: defaults; relative `kv_dir` resolves against the file; `kv_disk_gb = 0` and a non-bool `kv_tier` are rejected naming the key.
+- [ ] Run them, watch them fail; implement; run the suite; add `kvcache/` to `.gitignore`; commit.
+
+### Task 12: Entry format, chain manifests and invalidation
+
+**Files:** Create `moestream/kvtier.py`; Test `tests/test_kvtier.py`
+
+**Interfaces:**
+- Produces: `fingerprint(pack_dir, kv_bits) -> str`; `Store(dir, fingerprint)` that at construction wipes the directory on a `FORMAT` mismatch and deletes `.tmp` files and files no manifest names; `Store.chains -> {chain_id: Manifest}`; `Store.write_atomic(path, write_fn)`.
+- Consumes: the cache list shape of `model.make_cache()` (`state` and `meta_state` per layer).
+
+- [ ] Failing tests (spec tests 6 and 7): leftover `.tmp` ignored and deleted; manifest naming a missing file drops the chain; corrupt manifest drops the chain; a different `kv_bits`, layout hash or format version wipes the directory.
+- [ ] Implement the `FORMAT` file, per-chain `manifest.json` and the atomic write helper; run the suite; commit.
+
+### Task 13: Snapshot writer
+
+**Files:** Modify `moestream/kvtier.py`; Test `tests/test_kvtier.py`
+
+**Interfaces:**
+- Produces: `Store.save(tokens, cache)` (queues and returns at once); one writer thread; full-attention layers appended as `full_NNN.safetensors` for the new token range only; sliding layers written whole as `sliding_<tokens>.safetensors`; manifest replaced last.
+- Consumes: Task 12's `write_atomic`, manifests.
+
+- [ ] Failing tests (spec tests 3 and 10, part of 11): three turns write three full-attention segments whose bytes equal the cache's full-attention bytes at turn 3; a slow fake writer does not delay `save`; a second snapshot for the same chain replaces a queued one; three failing writes turn writes off; a snapshot that does not extend a chain starts a new chain.
+- [ ] Implement; run the suite; commit.
+
+### Task 14: Prefix-hash index and lookup
+
+**Files:** Modify `moestream/kvtier.py`; Test `tests/test_kvtier.py`
+
+**Interfaces:**
+- Produces: `Store.lookup(tokens, ram_prefix, context_tokens) -> (n_tokens, chain_id) | None`, hashing the prompt once in a single pass at every snapshot length the index holds; `MIN_RESTORE_TOKENS = 2048`.
+- Consumes: Task 12/13 manifests (token count and SHA-256 per snapshot).
+
+- [ ] Failing tests (spec test 5): longest matching snapshot wins; a match under `ram_prefix + MIN_RESTORE_TOKENS` returns None and reads no KV; an entry longer than `context_tokens` is skipped; a branched history matches only up to its last common snapshot.
+- [ ] Implement; run the suite; commit.
+
+### Task 15: Restore path
+
+**Files:** Modify `moestream/kvtier.py`; Test `tests/test_kvtier.py`
+
+**Interfaces:**
+- Produces: `Store.restore(chain_id, n_tokens, cache)`: fills a fresh `model.make_cache()` list in place, reading one array at a time with `F_NOCACHE` into one reusable host buffer, truncating full-attention KV to `n_tokens` and loading the sliding snapshot for that point.
+- Consumes: Task 13's files; lagunaLab's `make_quantized_cache` caches (frozen interface), never mlx-lm's `load_prompt_cache`.
+
+- [ ] Failing tests (spec tests 1, 9, part of 11): save then restore gives bit-identical next-token logits at `kv_bits` 0 and 8; restoring turn 2 of a 3-turn chain equals the cache at turn 2; at most one host buffer of the largest array's size is allocated (injected allocator); a failing read drops the chain and returns None.
+- [ ] Implement; run the suite; commit.
+
+### Task 16: Disk cap and pruning
+
+**Files:** Modify `moestream/kvtier.py`; Test `tests/test_kvtier.py`
+
+**Interfaces:**
+- Produces: `Store.prune(cap_bytes)`, run by the writer after each write: deletes whole chains, oldest last use first, until under the cap; sliding snapshots kept: the latest per chain plus every 8th turn.
+
+- [ ] Failing tests (spec tests 4 and 8): writing past the cap deletes whole chains in last-use order; only the latest and every 8th sliding snapshot survive.
+- [ ] Implement; run the suite; commit.
+
+### Task 17: Wire the tier into the server
+
+**Files:** Modify `tools/serve.py`; Test `tests/test_serve.py`; Modify `docs/serving.md`, `docs/configuration.md`
+
+**Interfaces:**
+- Produces: the `LRUPromptCache` wrapper in `patch_server` consults `Store.lookup` after mlx-lm's own lookup in `fetch_nearest_cache` and restores into `model.make_cache()` when it wins; `insert_cache` calls `Store.save`; `kv_tier = false` leaves today's behaviour unchanged.
+- Consumes: Tasks 11-16.
+
+- [ ] Failing tests (spec test 2): on the tiny model, turn 2 decoded after an SSD restore gives the same tokens and logits as turn 2 after a RAM-cache hit; with `kv_tier = false` nothing is written; a restore error falls back to full prefill with correct output.
+- [ ] Implement; run the suite; document the keys and the restore log line; commit.
+
+### Task 18: Verify on real weights (gated)
+
+**Needs the GPU lock (`.gpu/gpu-run moe`), the watchdog (`tools/watch.sh 4 17` while the user is on the machine) and the coordinator's go before each run.** Kill servers by PID; `ps` check afterwards.
+
+**Files:** Modify `tools/drive.py` (live-use mode: keep the model's own replies in the history, sessions interleaved turn by turn); Modify `README.md`; results under `results/kvtier_*`
+
+- [ ] Run the spec's five checks ("Verification on real weights"): 3 interleaved sessions with the tier off and on (prompt tokens within 10% of the simulated floor, restores at least 10x faster than the prefill they replace, peak footprint at most `memory_gb` + 1.2 GB, no swap growth); restart mid-run resumes from SSD; `kill -9` mid-write recovers to the previous turn; greedy continuation after a restore equals the one after a RAM hit for 3 turns; directory stays under `kv_disk_gb`, bytes written per turn reported.
+- [ ] Record the numbers in the README; commit `results/kvtier_*` and the README; report to the coordinator.
