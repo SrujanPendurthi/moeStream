@@ -50,9 +50,10 @@ def _text(m):
 
 
 def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_after=None, probe=None):
-    """`rounds` turns of each unfinished session, interleaved. probe_after: after each turn, two greedy
-    48-token continuations of the next prompt (RAM hits), kept in that JSON file per session; probe:
-    one greedy continuation per session, without turns. Probes never advance a conversation."""
+    """`rounds` turns of each unfinished session, interleaved. probe_after: after each turn, one greedy
+    48-token continuation of the next prompt (a RAM hit), kept in that JSON file per session; probe:
+    one greedy continuation per session, without turns. Probes never advance a conversation, but each
+    leaves the server a reply nothing continues, and the SSD tier keeps only two per chain."""
     state, log = Path(state), Path(log)
     st = json.loads(state.read_text()) if state.exists() else {}
     rec = {f: _session(f) for f in files}
@@ -106,7 +107,7 @@ def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_af
             state.write_text(json.dumps(st))
             time.sleep(pause)  # tool time; also lets the snapshot writer finish before the probes
             if probe_after and j < len(msgs):
-                probes(probe_after, f, 2)
+                probes(probe_after, f, 1)
     if probe:
         for f in files:
             probes(probe, f, 1)

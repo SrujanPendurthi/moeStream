@@ -84,6 +84,21 @@ def patch_server(server, cfg):
     slice of tuner work whenever the generation thread polls an empty request queue."""
     lru = server.LRUPromptCache
     server.load = make_loader(cfg)
+    memlog = os.environ.get("MOESTREAM_MEMLOG")
+
+    def mem(event, **kw):
+        """MOESTREAM_MEMLOG=<file>: MLX memory at the start and end of every request, as JSON lines.
+        peak_gb at "insert" is the request's peak (reset at each "fetch")."""
+        if not memlog:
+            return
+        import mlx.core as mx
+
+        row = dict(event=event, t=round(time.time(), 2), **kw, active_gb=round(mx.get_active_memory() / 1e9, 3),
+                   cache_gb=round(mx.get_cache_memory() / 1e9, 3), peak_gb=round(mx.get_peak_memory() / 1e9, 3))
+        with open(memlog, "a") as f:
+            f.write(json.dumps(row) + "\n")
+        if event == "fetch":
+            mx.reset_peak_memory()
 
     class PromptCache(lru):
         """mlx-lm's RAM prompt cache, plus the SSD tier (moestream/kvtier.py) when it is on."""
@@ -92,6 +107,11 @@ def patch_server(server, cfg):
             super().__init__(max_size, max_bytes=session_kv_bytes(cfg))
 
         def fetch_nearest_cache(self, model, tokens):
+            cache, rest = self._fetch(model, tokens)
+            mem("fetch", prompt_tokens=len(tokens), reused=len(tokens) - len(rest))
+            return cache, rest
+
+        def _fetch(self, model, tokens):
             if TIER:
                 store, m = TIER[0]
                 # RAM match length without mlx-lm's deep copy, so a restore never sits beside one.
@@ -113,6 +133,7 @@ def patch_server(server, cfg):
 
         def insert_cache(self, model, tokens, prompt_cache, *, cache_type="assistant"):
             super().insert_cache(model, tokens, prompt_cache, cache_type=cache_type)
+            mem("insert", tokens=len(tokens), cache_type=cache_type)
             if TIER and cache_type == "assistant":  # turn ends only; mid-prompt segments are not restorable points
                 TIER[0][0].save(tokens, prompt_cache)
 

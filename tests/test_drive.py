@@ -65,10 +65,10 @@ def test_probes_are_greedy_and_do_not_advance_the_conversation(tmp_path, monkeyp
     _fake(monkeypatch, sent)
     state, out = tmp_path / "state.json", tmp_path / "probe.json"
     live(state, ["a"], rounds=1, url="u", log=tmp_path / "l", tag="on", pause=0, probe_after=out)
-    assert [b["temperature"] for b in sent[1:]] == [0.0, 0.0] and len(sent[1]["messages"]) == len(sent[2]["messages"]) == 4
-    assert json.loads(out.read_text())["a"] == ["live 2", "live 3"]
+    assert [b["temperature"] for b in sent[1:]] == [0.0] and len(sent[1]["messages"]) == 4   # one dead end only
+    assert json.loads(out.read_text())["a"] == ["live 2"]
     live(state, ["a"], rounds=0, url="u", log=tmp_path / "l", tag="restart", pause=0, probe=tmp_path / "p2.json")
-    assert json.loads((tmp_path / "p2.json").read_text()) == {"a": ["live 4"]}
+    assert json.loads((tmp_path / "p2.json").read_text()) == {"a": ["live 3"]}
     assert json.loads(state.read_text())["a"]["history"][-1]["content"] == "t1"
 
 

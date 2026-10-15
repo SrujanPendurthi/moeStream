@@ -228,3 +228,17 @@ def test_shared_machine_mode_drops_the_wired_limit_and_caps_the_buffer_pool(monk
     serve.shared_machine()
     mx.set_wired_limit(1 << 34)                       # what mlx-lm does at start and per generation
     assert limits == [1 << 30]
+
+
+def test_each_request_logs_mlx_memory_when_asked(tmp_path, monkeypatch):
+    import json
+
+    log = tmp_path / "mem.log"
+    monkeypatch.setenv("MOESTREAM_MEMLOG", str(log))
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    _turn(model, LRU(6), T1)
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    assert [r["event"] for r in rows] == ["fetch", "insert"]
+    assert rows[0]["prompt_tokens"] == len(T1) and rows[0]["reused"] == 0 and rows[1]["tokens"] == len(T1) + 3
+    for r in rows:
+        assert {"t", "active_gb", "cache_gb", "peak_gb"} <= set(r) and r["active_gb"] > 0
