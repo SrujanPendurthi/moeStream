@@ -1,5 +1,20 @@
 # Prefill memory: what grows, and how to measure it
 
+**Update 2026-10-15, after the main pass (`results/prefill_mem_main.json`): cause found and fixed
+(f357884).** The transient grew ~0.4 GB per prefill *chunk* (0.20 GB per 1k tokens at step 2048,
+0.39 at step 1024), not per token: halving the step doubled the growth. mlx-lm's prefill evaluates
+only the caches after each chunk; nothing reads the last layer's expert output, so that layer's
+slot writes (one layer of routed experts, ~0.4 GB) stayed pending across chunks until the end of
+the prompt. `StreamingMoE` now `async_eval`s its slot tensors at the end of every multi-token call.
+Reproduced and pinned at tiny scale
+(`test_prefill_chunks_evaluated_as_mlx_lm_does_do_not_pile_up_slot_writes`). The analysis below
+was written before this and is kept as the record; its "unexplained ~3.3 GB" is this.
+
+| step | 5k | 15k | 30k |
+|---|---|---|---|
+| 2048: transient / top MEM / tok/s | 1.97 GB / 11.0 GB / 81 | 4.14 / 13.3 / 82 | 6.98 / 16.0 / 72 |
+| 1024: transient / top MEM / tok/s | 2.65 / 12.3 / 75 | 6.52 / 16.0 / 67 | watchdog (17.4 GB footprint) |
+
 Status 2026-10-15. Off-GPU analysis after two real-weight attempts of `tools/prefill_mem.py`
 were stopped by the 2 GB swap guard with the machine in use (`results/prefill_mem_attempt2*`,
 `results/prefill_mem_attempt3*`). No fitted context term yet; this page says what the code
