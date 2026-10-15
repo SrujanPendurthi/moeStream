@@ -1,0 +1,10 @@
+[04:48:32] phase long: start
+[05:17:23] phase long: done
+watch: peak swap 463 MB, peak footprint 15360 MB
+[05:17:25] phase restart: start
+moeStream kv tier: restored 82062 tokens in 1.28 s (RAM had 0, 128 left to process)
+[05:18:12] phase restart: done (1 restores)
+watch: peak swap 463 MB, peak footprint 15360 MB
+[05:18:14] disk: 3.3G
+[05:18:14] left running (want none):
+exit 0

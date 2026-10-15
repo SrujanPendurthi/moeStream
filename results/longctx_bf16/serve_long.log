@@ -1,0 +1,67 @@
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/mlx_lm/server.py:1723: UserWarning: mlx_lm.server is not recommended for production as it only implements basic security checks.
+  warnings.warn(
+2026-10-15 04:48:34,689 - INFO - Starting httpd at 127.0.0.1 on port 8081...
+moeStream: 2528 slots (4.47 GB), per layer 48-96, half-life 64, eviction lfu, kv 16-bit
+[transformers] The tokenizer you are loading from '/Users/srujanpendurthi/Projects/Current/moeStream/../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+2026-10-15 04:48:37,005 - INFO - Prompt Cache: 0 sequences, 0.00 GB
+2026-10-15 04:48:37,005 - INFO - - assistant: 0 sequences, 0.00 GB
+2026-10-15 04:48:37,005 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-15 04:48:37,005 - INFO - - system: 0 sequences, 0.00 GB
+127.0.0.1 - - [15/Oct/2026 04:48:37] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-15 04:48:55,116 - INFO - Prompt processing progress: 2048/80583
+2026-10-15 04:49:14,851 - INFO - Prompt processing progress: 4096/80583
+2026-10-15 04:49:35,963 - INFO - Prompt processing progress: 6144/80583
+2026-10-15 04:49:57,397 - INFO - Prompt processing progress: 8192/80583
+2026-10-15 04:50:21,674 - INFO - Prompt processing progress: 10240/80583
+2026-10-15 04:50:50,176 - INFO - Prompt processing progress: 12288/80583
+2026-10-15 04:51:21,397 - INFO - Prompt processing progress: 14336/80583
+2026-10-15 04:51:52,785 - INFO - Prompt processing progress: 16384/80583
+2026-10-15 04:52:24,031 - INFO - Prompt processing progress: 18432/80583
+2026-10-15 04:52:55,067 - INFO - Prompt processing progress: 20480/80583
+2026-10-15 04:53:27,102 - INFO - Prompt processing progress: 22528/80583
+2026-10-15 04:53:59,787 - INFO - Prompt processing progress: 24576/80583
+2026-10-15 04:54:26,674 - INFO - Prompt processing progress: 26624/80583
+2026-10-15 04:55:00,533 - INFO - Prompt processing progress: 28672/80583
+2026-10-15 04:55:35,069 - INFO - Prompt processing progress: 30720/80583
+2026-10-15 04:56:03,758 - INFO - Prompt processing progress: 32768/80583
+2026-10-15 04:56:39,562 - INFO - Prompt processing progress: 34816/80583
+2026-10-15 04:57:14,870 - INFO - Prompt processing progress: 36864/80583
+2026-10-15 04:57:45,983 - INFO - Prompt processing progress: 38912/80583
+2026-10-15 04:58:24,030 - INFO - Prompt processing progress: 40960/80583
+2026-10-15 04:58:56,228 - INFO - Prompt processing progress: 43008/80583
+2026-10-15 04:59:35,656 - INFO - Prompt processing progress: 45056/80583
+2026-10-15 05:00:09,370 - INFO - Prompt processing progress: 47104/80583
+2026-10-15 05:00:49,980 - INFO - Prompt processing progress: 49152/80583
+2026-10-15 05:01:26,223 - INFO - Prompt processing progress: 51200/80583
+2026-10-15 05:02:03,931 - INFO - Prompt processing progress: 53248/80583
+2026-10-15 05:02:46,933 - INFO - Prompt processing progress: 55296/80583
+2026-10-15 05:03:30,764 - INFO - Prompt processing progress: 57344/80583
+2026-10-15 05:04:16,209 - INFO - Prompt processing progress: 59392/80583
+2026-10-15 05:05:02,577 - INFO - Prompt processing progress: 61440/80583
+2026-10-15 05:05:49,683 - INFO - Prompt processing progress: 63488/80583
+2026-10-15 05:06:37,466 - INFO - Prompt processing progress: 65536/80583
+2026-10-15 05:07:25,988 - INFO - Prompt processing progress: 67584/80583
+2026-10-15 05:08:15,036 - INFO - Prompt processing progress: 69632/80583
+2026-10-15 05:09:04,847 - INFO - Prompt processing progress: 71680/80583
+2026-10-15 05:09:55,204 - INFO - Prompt processing progress: 73728/80583
+2026-10-15 05:10:46,252 - INFO - Prompt processing progress: 75776/80583
+2026-10-15 05:11:37,482 - INFO - Prompt processing progress: 77824/80583
+2026-10-15 05:12:29,484 - INFO - Prompt processing progress: 79872/80583
+2026-10-15 05:12:51,636 - INFO - Prompt processing progress: 80582/80583
+2026-10-15 05:12:53,432 - INFO - Prompt processing progress: 80583/80583
+2026-10-15 05:14:07,898 - INFO - Prompt Cache: 1 sequences, 3.38 GB
+2026-10-15 05:14:07,899 - INFO - - assistant: 1 sequences, 3.38 GB
+2026-10-15 05:14:07,899 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-15 05:14:07,899 - INFO - - system: 0 sequences, 0.00 GB
+127.0.0.1 - - [15/Oct/2026 05:14:08] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-15 05:14:13,952 - INFO - Prompt processing progress: 130/131
+2026-10-15 05:14:16,008 - INFO - Prompt processing progress: 131/131
+2026-10-15 05:15:36,226 - INFO - Prompt Cache: 1 sequences, 3.40 GB
+2026-10-15 05:15:36,227 - INFO - - assistant: 1 sequences, 3.40 GB
+2026-10-15 05:15:36,227 - INFO - - user: 0 sequences, 0.00 GB
+2026-10-15 05:15:36,227 - INFO - - system: 0 sequences, 0.00 GB
+127.0.0.1 - - [15/Oct/2026 05:15:36] "POST /v1/chat/completions HTTP/1.1" 200 -
+2026-10-15 05:15:43,812 - INFO - Prompt processing progress: 203/204
+2026-10-15 05:15:45,782 - INFO - Prompt processing progress: 204/204
+tools/watch.sh: line 21: 73324 Terminated: 15          "$@"
+watch: peak swap 463 MB, peak footprint 15360 MB

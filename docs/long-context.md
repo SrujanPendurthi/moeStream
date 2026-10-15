@@ -99,3 +99,42 @@ the split is from the instrumented pass (ms per token).
    An alternative that keeps q8's memory: quantized SDPA at decode (lagunaLab's
    `quantized_decode=True`); its synthetic numbers put that at 12.05 against 12.98 ms per layer at
    82k, so it would recover little of the 42 ms.
+
+## 81k with the recommended settings (2026-10-15, `results/longctx_bf16/`)
+
+Same replay and harness as the first 81k run; set by config only: `kv_bits = 0`, `lookahead = false`,
+`kv_sessions = 1`, tier on, step 2048, pool 1 GB, watchdog 4 GB / 17 GB. `memory_gb = 12`, not 14:
+at 14 a RAM-hit turn's two bf16 KV copies (~3.3 GB each at 81k) predicted a footprint over the
+17 GB watchdog. So slots are 4.47 GB here against 6.14 GB in the q8 run: two things changed.
+
+| | q8, lookahead on, 14 GB (first run) | bf16, lookahead off, 1 session, 12 GB |
+|---|---|---|
+| prefill 80,583 tokens | 59.8 tok/s | 55.3 tok/s |
+| decode at ~81k | 3.1-3.3 tok/s | **4.3-5.0 tok/s** |
+| decode hit rate (turns 1-2) | 0.80 | 0.71 / 0.63 |
+| MLX peak | 11.72 GB | **15.81 GB** |
+| footprint (watchdog) / swap | 13.0 GB / 0.54 GB | 15.0 GB / 0.46 GB |
+| SSD restore after restart | 82,074 tokens in 0.75 s | 82,062 tokens in 1.28 s |
+| disk | 1.8 GB | 3.3 GB |
+
+- **Decode +40-50% at 81k** (turn 0: 340 tokens in ~68 s after prefill, 5.0 tok/s; turn 3 after
+  the restore ~4.7), with fewer slots and a lower hit rate.
+- **bf16 goes through mlx-lm's batched path** (its caches can merge), and the SSD tier works there
+  on real weights: the restore after restart took 1.28 s, no errors, no fallback. This closes the
+  gap the final review flagged.
+- **Memory is the cost.** On the batched path mlx-lm stores two cache entries per turn (the prompt,
+  then prompt + reply), and the peaks came at the second insert of each turn (15.73, 15.81 GB). At
+  81k that is ~3 bf16 KV copies live at once, not the one `kv_sessions = 1` reserves. With
+  `memory_gb = 12` it fits under a 17 GB watchdog with ~1 GB to spare; at 128k it would not.
+
+## Recommended defaults (for the user's decision; nothing applied)
+
+(a) **Lookahead off** (`lookahead = false`): ~20 ms per token faster at 32k / 64 slots (186.5 to
+166.0 ms) and steadier timing (a repeat within 2%); it was never measured as a win. Low risk.
+(b) **bf16 KV with a 1-session reserve and the SSD tier** (`kv_bits = 0`, `kv_sessions = 1`): at 32k
+decode within 4% of lagunaLab (113.3 vs 108.8 ms, against 166-169 ms at q8); at 81k 4.3-5.0 against
+3.1-3.3 tok/s. But the MLX peak at 81k was 15.8 GB even at `memory_gb = 12`, because mlx-lm's
+batched path keeps the prompt's and the reply's caches and deep-copies a RAM hit. So (b) needs one
+more change before it is safe as a default at 128k: cap the RAM prompt cache to one entry on that
+path (or skip the prompt-only insert), and re-measure. Until then: (b) at `memory_gb = 12` for
+sessions up to ~80k, and q8 for longer ones.

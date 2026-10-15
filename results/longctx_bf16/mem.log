@@ -1,0 +1,12 @@
+{"event": "fetch", "t": 1792064917.01, "prompt_tokens": 80583, "reused": 0, "active_gb": 1.156, "cache_gb": 0.0, "peak_gb": 1.156, "hits": 0, "misses": 0}
+{"event": "insert", "t": 1792066371.65, "tokens": 80582, "cache_type": "assistant", "active_gb": 9.082, "cache_gb": 0.025, "peak_gb": 10.381, "hits": 2151, "misses": 335339}
+{"event": "insert", "t": 1792066442.76, "tokens": 80923, "cache_type": "assistant", "active_gb": 12.467, "cache_gb": 1.014, "peak_gb": 12.802, "hits": 80921, "misses": 362961}
+{"event": "fetch", "t": 1792066447.91, "prompt_tokens": 81054, "reused": 80923, "active_gb": 12.458, "cache_gb": 1.24, "peak_gb": 14.309, "hits": 80921, "misses": 362961}
+{"event": "insert", "t": 1792066454.05, "tokens": 81053, "cache_type": "assistant", "active_gb": 12.412, "cache_gb": 0.005, "peak_gb": 12.766, "hits": 81936, "misses": 368315}
+{"event": "insert", "t": 1792066531.1, "tokens": 81432, "cache_type": "assistant", "active_gb": 12.427, "cache_gb": 0.019, "peak_gb": 15.732, "hits": 169492, "misses": 399007}
+{"event": "fetch", "t": 1792066536.24, "prompt_tokens": 81636, "reused": 81432, "active_gb": 12.427, "cache_gb": 1.083, "peak_gb": 15.732, "hits": 169492, "misses": 399007}
+{"event": "insert", "t": 1792066543.83, "tokens": 81635, "cache_type": "assistant", "active_gb": 12.462, "cache_gb": 0.018, "peak_gb": 12.848, "hits": 170398, "misses": 405122}
+{"event": "insert", "t": 1792066638.03, "tokens": 82062, "cache_type": "assistant", "active_gb": 12.491, "cache_gb": 1.026, "peak_gb": 15.806, "hits": 257651, "misses": 451093}
+{"event": "fetch", "t": 1792066650.99, "prompt_tokens": 82190, "reused": 82062, "active_gb": 4.58, "cache_gb": 0.0, "peak_gb": 4.58, "hits": 0, "misses": 0}
+{"event": "insert", "t": 1792066657.32, "tokens": 82189, "cache_type": "assistant", "active_gb": 9.079, "cache_gb": 0.01, "peak_gb": 9.445, "hits": 0, "misses": 6341}
+{"event": "insert", "t": 1792066687.4, "tokens": 82337, "cache_type": "assistant", "active_gb": 12.519, "cache_gb": 1.029, "peak_gb": 12.862, "hits": 31574, "misses": 20943}
