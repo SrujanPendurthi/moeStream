@@ -238,3 +238,58 @@ def load_self_refs(refs_dir, sessions, self_dir):
         acts = json.loads((Path(self_dir) / f"{s}.json").read_text())["actions"]
         out[s] = (r["ids"], r["action_starts"], acts, int(r["max_new"]))
     return out
+
+
+LAB = "../lagunaLab"
+DJANGO = ["django__django-10914", "django__django-10924", "django__django-11001", "django__django-11019",
+          "django__django-11039"]
+_PRUNED, _FULL = f"{LAB}/models/Laguna-XS-2.1-pruned-50-packed", f"{LAB}/models/Laguna-XS-2.1-packed"
+SETTINGS = {  # the spec's comparison table
+    "E1": dict(pack=_PRUNED, kv_bits=8, refs=f"{LAB}/refs/kv", context_tokens=90112, gate=(0.02, 0.98)),
+    "E2": dict(pack=_PRUNED, kv_bits=0, refs=f"{LAB}/refs/kv", context_tokens=90112, gate=(0.005, 0.995)),
+    "M1": dict(pack=_FULL, kv_bits=8, refs=f"{LAB}/refs/prune", context_tokens=32768, gate=(0.02, 0.98)),
+    "A0": dict(pack=_FULL, kv_bits=8, refs=f"{LAB}/refs/prune_actions", context_tokens=32768),
+    "A1": dict(pack=_FULL, kv_bits=8, refs=f"{LAB}/refs/prune_actions", context_tokens=32768),
+}
+
+
+def parse_args(argv=None):
+    import argparse
+
+    p = argparse.ArgumentParser(description="parity eval (docs/specs/2026-10-15-parity-eval-design.md)")
+    p.add_argument("--id", required=True, choices=sorted(SETTINGS))
+    p.add_argument("--sessions", nargs="+", default=DJANGO)
+    p.add_argument("--out", required=True, help="a path in this repo, never lagunaLab's")
+    p.add_argument("--memory-gb", type=float, default=12.0)
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    from pathlib import Path
+
+    from replay.session import load_session
+
+    a = parse_args(argv)
+    s = SETTINGS[a.id]
+    model, tok = load_engine(s["pack"], s["kv_bits"], a.memory_gb, s["context_tokens"])
+    meta = {"id": a.id, "pack": s["pack"], "kv_bits": s["kv_bits"], "memory_gb": a.memory_gb, "refs": s["refs"]}
+    if "gate" in s:
+        res = score_sessions(model, s["refs"], a.sessions, a.out, meta=meta)
+        res["gate"] = {"kl": s["gate"][0], "top1": s["gate"][1], "pass": gate(res["summary"], *s["gate"])}
+    else:
+        tools = {x: load_session(f"{LAB}/traces/{x}.jsonl")[1] for x in a.sessions}
+        refs = None
+        if a.id == "A0":
+            self_dir = Path(a.out).with_suffix("") / "self_refs"
+            build_self_refs(model, tok, s["refs"], a.sessions, self_dir)
+            refs = load_self_refs(s["refs"], a.sessions, self_dir)
+        rows, summary = action_rows(model, tok, s["refs"], a.sessions, tools, refs=refs)
+        res = {**meta, "rows": rows, "summary": summary}
+        if a.id == "A1":
+            res["gate"] = {"pass": action_gate(summary, n=summary["n"])}
+    Path(a.out).write_text(json.dumps(res, indent=1))
+    print("summary:", json.dumps(res.get("summary")), "gate:", json.dumps(res.get("gate")), flush=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -227,3 +227,18 @@ def test_self_references_are_saved_and_read_back_for_a0(tmp_path):
     refs = load_self_refs(tmp_path / "arefs", ["s1"], tmp_path / "self")
     rows, summary = action_rows(None, _Tok(), None, ["s1"], tools={"s1": TOOLS}, greedy=greedy, refs=refs)
     assert summary["exact"] == 2 and [r["start"] for r in rows] == [10, 11]
+
+
+def test_each_comparison_has_its_settings_and_gate():
+    from tools.parity import DJANGO, SETTINGS, parse_args
+
+    assert set(SETTINGS) == {"E1", "E2", "M1", "A0", "A1"}
+    assert SETTINGS["E1"]["kv_bits"] == 8 and "pruned-50" in SETTINGS["E1"]["pack"] and SETTINGS["E1"]["refs"].endswith("refs/kv")
+    assert SETTINGS["E2"]["kv_bits"] == 0 and SETTINGS["E2"]["gate"] == (0.005, 0.995)
+    assert SETTINGS["M1"]["refs"].endswith("refs/prune") and "pruned" not in SETTINGS["M1"]["pack"]
+    assert SETTINGS["E1"]["gate"] == SETTINGS["M1"]["gate"] == (0.02, 0.98)
+    a = parse_args(["--id", "E1", "--sessions", "django__django-11019", "--out", "results/x.json"])
+    assert a.id == "E1" and a.sessions == ["django__django-11019"] and a.out == "results/x.json"
+    assert parse_args(["--id", "A1", "--out", "r.json"]).sessions == DJANGO
+    with pytest.raises(SystemExit):
+        parse_args(["--id", "E1"])                                  # --out is required: never lagunaLab's default
