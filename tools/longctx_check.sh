@@ -10,7 +10,7 @@
 # MEM the memory_gb (default 14.0); STEP the prefill step size (mlx-lm default 2048); BACK how many turns
 # before the session's end to start (default 4); KV_BITS the kv_bits (default 8); LOOKAHEAD true|false (default
 # true); SESSIONS kv_sessions (default 2); ENTRIES prompt_cache_entries (default 6);
-# RELEASE release_merged_caches (default false); MOESTREAM_PREFILL_SET=1 passes through to the server.
+# RELEASE release_merged_caches (default false); EVICT release_evicted_caches (default false); MOESTREAM_PREFILL_SET=1 passes through to the server.
 set -u
 cd "$(dirname "$0")/.."
 REPO=$(pwd)
@@ -25,6 +25,7 @@ LOOKAHEAD=${LOOKAHEAD:-true}
 SESSIONS=${SESSIONS:-2}
 ENTRIES=${ENTRIES:-6}
 RELEASE=${RELEASE:-false}
+EVICT=${EVICT:-false}
 STEP=${STEP:+--prefill-step-size $STEP}
 mkdir -p "$OUT"
 KV=$(cd "$OUT" && pwd)/kvcache
@@ -38,6 +39,7 @@ lookahead = $LOOKAHEAD
 kv_sessions = $SESSIONS
 prompt_cache_entries = $ENTRIES
 release_merged_caches = $RELEASE
+release_evicted_caches = $EVICT
 calibration = "$REPO/budget.json"
 thinking = true
 tune = false

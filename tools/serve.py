@@ -86,6 +86,8 @@ def patch_server(server, cfg):
     server.load = make_loader(cfg)
     if cfg.release_merged_caches:
         release_merged_caches()
+    if cfg.release_evicted_caches:
+        print("moeStream: release_evicted_caches on: caches the prompt cache drops are emptied", file=sys.stderr)
     if os.environ.get("MOESTREAM_PREFILL_SET") == "1":  # experimental, off by default (docs/prefill-memory.md)
         import moestream.layer
 
@@ -120,6 +122,8 @@ def patch_server(server, cfg):
 
         def __init__(self, max_size):
             super().__init__(max_size, max_bytes=session_kv_bytes(cfg))
+            if cfg.release_evicted_caches:
+                release_evicted(self._trie)
 
         def _held(self):  # what the RAM cache and the tier writer hold, for the memory log
             st = TIER[0][0] if TIER else None
@@ -209,6 +213,35 @@ def live_kv():
     return out
 
 
+def _empty(caches):
+    for c in caches:
+        if hasattr(c, "keys"):
+            c.keys = c.values = None
+
+
+def release_evicted(trie):
+    """Empty a cache entry's arrays when the prompt cache drops it (evicted, or replaced under the
+    same key). Something outside may still hold the entry: mlx-lm's batched path keeps its
+    end-of-prompt cache in a loop variable after inserting it, a full KV copy between turns
+    (results/longctx_bf16_rel12). Safe: the prompt cache hands out deep copies, and both of
+    mlx-lm's paths insert caches no request is still using."""
+    pop, add = trie.pop, trie.add
+
+    def _pop(model, tokens):
+        e = pop(model, tokens)
+        if e is not None:
+            _empty(e.prompt_cache)
+        return e
+
+    def _add(model, tokens, entry):
+        prev = add(model, tokens, entry)
+        if prev is not None and prev.prompt_cache is not entry.prompt_cache:
+            _empty(prev.prompt_cache)
+        return prev
+
+    trie.pop, trie.add = _pop, _add
+
+
 def release_merged_caches():
     """mlx-lm's batched path (caches that can merge, i.e. bf16 KV) copies a request's fetched cache
     into its batch, then keeps the original bound until the next request: a second KV copy between
@@ -223,9 +256,7 @@ def release_merged_caches():
     def _merge_caches(caches):
         out = merge(caches)
         for layers in caches:
-            for c in layers:
-                if hasattr(c, "keys"):
-                    c.keys = c.values = None
+            _empty(layers)
         return out
 
     gen._merge_caches = _merge_caches

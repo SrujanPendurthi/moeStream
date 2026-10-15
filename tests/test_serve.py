@@ -404,3 +404,55 @@ def test_release_merged_caches_leaves_the_prompt_cache_entry_and_the_tier_alone(
 def test_release_merged_caches_says_so_at_startup(monkeypatch, capsys):
     _merge_setup(monkeypatch, release_merged_caches=True)
     assert "release_merged_caches on" in capsys.readouterr().err
+
+
+def _lru_with(tmp_path, monkeypatch, **cfg):
+    from types import SimpleNamespace
+
+    from mlx_lm.models.cache import LRUPromptCache
+
+    import tools.serve as serve
+
+    monkeypatch.setattr(serve, "TIER", [])
+    server = SimpleNamespace(LRUPromptCache=LRUPromptCache, load=None,
+                             ResponseGenerator=type("RG", (), {"_next_request": lambda self, timeout=None: None}))
+    serve.patch_server(server, EngineConfig(pack_dir="/p", context_tokens=200, kv_bits=0, **cfg))
+    return server.LRUPromptCache
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_release_evicted_caches_empties_what_the_prompt_cache_drops(tmp_path, monkeypatch, on):
+    import mlx.core as mx
+
+    LRU = _lru_with(tmp_path, monkeypatch, release_evicted_caches=on)
+    lru = LRU(1)                                         # one entry: the second insert evicts the first
+    a, b = _kv_pair(5, 0), _kv_pair(6, 1)
+    lru.insert_cache("m", [1, 2, 3, 4, 5], a)
+    lru.insert_cache("m", [9, 9, 9, 9, 9, 9], b)
+    assert (a[0].keys is None) == on                     # evicted: emptied only with the flag
+    assert b[0].keys is not None and mx.array_equal(b[0].keys[:, :, :6], _kv_pair(6, 1)[0].keys[:, :, :6]).item()
+
+
+def test_release_evicted_caches_empties_an_entry_replaced_under_the_same_key(tmp_path, monkeypatch):
+    LRU = _lru_with(tmp_path, monkeypatch, release_evicted_caches=True)
+    lru = LRU(6)
+    a, b = _kv_pair(5, 0), _kv_pair(5, 1)
+    lru.insert_cache("m", [1, 2, 3, 4, 5], a)
+    lru.insert_cache("m", [1, 2, 3, 4, 5], b)
+    assert a[0].keys is None and b[0].keys is not None
+    lru.insert_cache("m", [1, 2, 3, 4, 5], b)            # the same object again: not emptied
+    assert b[0].keys is not None
+
+
+def test_release_evicted_caches_keeps_turns_and_the_tier_working(tmp_path, monkeypatch):
+    import tools.serve as serve
+
+    model, LRU = _tiered(tmp_path, monkeypatch, release_evicted_caches=True)
+    ram = LRU(1)
+    _, out, _ = _turn(model, ram, T1)
+    _turn(model, ram, list(range(300, 340)))             # evicts conversation 1 from RAM
+    serve.TIER[0][0].flush()
+    t2 = T1 + out + T2[30:]
+    n, out2, _ = _turn(model, ram, t2)
+    assert n == len(T2) - 30                             # restored from SSD
+    assert _turn(model, ram, t2 + out2 + [7, 8, 9])[0] == 3  # and a RAM hit on the turn after
