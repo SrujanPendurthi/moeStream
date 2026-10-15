@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -291,3 +292,26 @@ def test_a_failed_read_drops_the_chain_and_returns_false(tiny, tmp_path):
     (tmp_path / "kv" / cid / m["segments"][0]["file"]).write_bytes(b"torn")
     assert s.restore(cid, 30, tiny.make_cache()) is False
     assert s.chains == {} and not (tmp_path / "kv" / cid).exists()
+
+
+def test_only_the_latest_and_every_8th_sliding_snapshot_survive(tmp_path):
+    s = Store(tmp_path / "kv", FP)
+    _turns(s, 0, [5 * (i + 1) for i in range(17)])
+    (cid, m), = s.chains.items()
+    assert [x["turn"] for x in m["snapshots"]] == [8, 16, 17]
+    assert sorted(f.name for f in (tmp_path / "kv" / cid).glob("sliding_*")) == \
+        ["sliding_40.safetensors", "sliding_80.safetensors", "sliding_85.safetensors"]
+
+
+def test_writing_past_the_cap_deletes_whole_chains_least_recently_used_first(tmp_path):
+    s = Store(tmp_path / "kv", FP)
+    chain = {}
+    for base, used in ((0, 300), (1, 100), (2, 200)):         # chain 1 is the least recently used
+        _turns(s, 0, [10, 20], base=base)
+        sha = kvtier._digests(range(base, base + 20), [20])[20]
+        (chain[base],) = [c for c, m in s.chains.items() if m["snapshots"][-1]["sha"] == sha]
+        os.utime(tmp_path / "kv" / chain[base] / "manifest.json", (used, used))
+    s.cap = 3 * sum(kvtier._files(s.chains[chain[0]]).values())
+    _turns(s, 0, [10, 20], base=3)
+    assert sorted(s.chains) == sorted([chain[0], chain[2], *set(s.chains) - set(chain.values())])
+    assert len(s.chains) == 3 and not (tmp_path / "kv" / chain[1]).exists()

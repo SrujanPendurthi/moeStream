@@ -158,8 +158,8 @@ def _load_chain(d):
 
 
 class Store:
-    def __init__(self, dir, fingerprint, alloc=bytearray):
-        self.dir, self.alloc = Path(dir), alloc
+    def __init__(self, dir, fingerprint, cap_bytes=None, alloc=bytearray):
+        self.dir, self.cap, self.alloc = Path(dir), cap_bytes, alloc
         self.dir.mkdir(parents=True, exist_ok=True)
         fmt = self.dir / "FORMAT"
         if not fmt.exists():
@@ -330,3 +330,25 @@ class Store:
             (d / f).unlink(missing_ok=True)
         with self.cv:
             self.chains[cid] = m2
+        self.prune()
+
+    def prune(self):
+        """Over the cap: delete whole chains, least recently used first (a chain without its early
+        full-attention segments is useless). Last use is the manifest's mtime."""
+        if self.cap is None:
+            return
+        with self.cv:
+            size = {cid: sum(_files(m).values()) for cid, m in self.chains.items()}
+
+        def used(cid):
+            try:
+                return (self.dir / cid / "manifest.json").stat().st_mtime
+            except OSError:
+                return 0
+        total = sum(size.values())
+        for cid in sorted(size, key=used):
+            if total <= self.cap:
+                break
+            log(f"over {self.cap / 1e9:.1f} GB: dropping chain {cid} ({size[cid] / 1e9:.2f} GB)")
+            self._drop(cid)
+            total -= size[cid]
