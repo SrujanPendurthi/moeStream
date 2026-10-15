@@ -60,6 +60,27 @@ extends the previous one, so after the first prompt only the new tokens are proc
 example when a client replays a recorded session whose assistant turns differ from what the model
 just generated.
 
+### SSD tier
+
+With `kv_tier = true` (the default) every turn-end cache mlx-lm stores in RAM is also written to
+`kv_dir` by a background thread (`moestream/kvtier.py`, spec
+`docs/specs/2026-10-14-ssd-kv-tier-design.md`). A request whose prompt extends a stored snapshot by
+at least 2048 tokens more than the RAM cache covers is restored from disk instead of re-processed:
+this is what keeps 2-3 interleaved sessions, and any session after a restart, from re-processing
+their whole history. The log shows each restore:
+
+```
+moeStream kv tier: restored 41210 tokens in 0.48 s (RAM had 0, 312 left to process)
+```
+
+- Per conversation: full-attention KV appended per turn, plus the sliding-window state of the
+  latest turn and of every 8th turn. About 87 MB written per turn at q8.
+- Files are written as temp files, fsynced and renamed, the manifest last: a crash loses at most
+  the last turn. A different pack, `kv_bits` or format version wipes the directory at startup.
+- A failed read drops that conversation's snapshots and falls back to a normal prefill; three
+  failed writes in a row turn writes off until restart. Neither fails a request.
+- Delete `kv_dir` to clear it; the server recreates it.
+
 ## pi
 
 The provider entry in `~/.pi/agent/models.json`:
@@ -104,6 +125,7 @@ results are in the top-level README ("pi check").
 |---|---|
 | `OSError: [Errno 48] Address already in use` | a previous server still holds port 8081: find its Python PID (above) and kill it |
 | decode drops to well under 5 tok/s and the machine is sluggish | macOS is paging: lower `memory_gb`, close heavy apps, check `sysctl vm.swapusage` |
+| `kv tier off: ...` warning at load | the tier could not start (for example `kv_dir` is a non-empty directory it did not create); serving goes on without it |
 | `aborted: paging` in the log | the watchdog stopped the server at its swap or footprint limit; same fix |
 | `memory_gb 14 GB but only 13.8 GB is free` warning at load | free memory is counted before the load; harmless when close, a real risk when far below |
 | replies never end | the end-of-turn token is missing: check `generation_config.json` is in the pack |

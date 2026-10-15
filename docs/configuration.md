@@ -21,6 +21,9 @@ directory. Unknown keys and wrongly typed values are errors at startup, never si
 | `tune` | true | run the self-tuner; false serves with the saved tuning state and never trials |
 | `tuning_dir` | `"tuning"` | tuning state, log and quality reference |
 | `trace_tokens` | 65536 | routing rows kept in memory per layer for replay trials |
+| `kv_tier` | true | SSD tier for the prompt cache: turn-end KV snapshots on disk, restored instead of re-processing a prompt ([serving.md](serving.md#ssd-tier)) |
+| `kv_dir` | `"kvcache"` | the tier's directory (git-ignored); a non-empty directory without the tier's `FORMAT` file is refused, never wiped |
+| `kv_disk_gb` | 10.0 | disk cap; above it whole conversations are deleted, least recently used first |
 
 The shipped file:
 
@@ -36,6 +39,9 @@ port = 8081
 tune = true
 tuning_dir = "tuning"
 trace_tokens = 65536
+kv_tier = true
+kv_dir = "kvcache"
+kv_disk_gb = 10.0
 ```
 
 ## What fits: worked examples
