@@ -1,0 +1,41 @@
+{
+ "memory_gb": 10.0,
+ "eval_groups": false,
+ "prefill_set": true,
+ "slots_gb": 6.398410752,
+ "resident_gb": 1.155702633,
+ "active_after_warmup_gb": 7.555648492,
+ "warmup_filled": true,
+ "rows": [
+  {
+   "step": 2048,
+   "tokens": 15000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.634677626,
+   "transient_gb": 2.080710766,
+   "prefill_tok_s": 119.68088325194391,
+   "top_mb": 12288,
+   "cache_gb": 0.306692244,
+   "bytes_read": 120913330176,
+   "pageins": 6275701
+  },
+  {
+   "step": 2048,
+   "tokens": 30000,
+   "active_gb": 7.55396686,
+   "peak_gb": 9.92205509,
+   "transient_gb": 2.36808823,
+   "prefill_tok_s": 95.76691933057677,
+   "top_mb": 12288,
+   "cache_gb": 0.605307028,
+   "bytes_read": 213044428800,
+   "pageins": 11066511
+  }
+ ],
+ "fit": {
+  "2048": {
+   "gb": 1.7933333020000004,
+   "gb_per_1k_tokens": 0.019158497599999998
+  }
+ }
+}
