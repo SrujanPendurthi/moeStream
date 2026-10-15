@@ -4,3 +4,4 @@ __pycache__/
 data/routing/
 tuning/
 results/ask.json
+kvcache/

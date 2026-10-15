@@ -53,6 +53,8 @@ def test_absolute_paths_are_kept(tmp_path):
     ("half_life = -1", "half_life"),
     ('thinking = "yes"', "thinking"),
     ("port = 70000", "port"),
+    ("kv_disk_gb = 0", "kv_disk_gb"),
+    ('kv_tier = "on"', "kv_tier"),
 ])
 def test_bad_values_raise_naming_the_key(tmp_path, line, key):
     with pytest.raises(ValueError, match=key):
@@ -71,3 +73,8 @@ def test_tuning_keys_default_and_resolve(tmp_path):
 def test_bad_tuning_values_raise(tmp_path, line):
     with pytest.raises(ValueError, match=line.split(" ")[0]):
         EngineConfig.read(_write(tmp_path, f'pack_dir = "p"\n{line}\n'))
+
+
+def test_ssd_tier_defaults_and_kv_dir_resolves_against_the_file(tmp_path):
+    c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
+    assert c.kv_tier is True and c.kv_disk_gb == 10.0 and c.kv_dir == str(tmp_path / "kvcache")

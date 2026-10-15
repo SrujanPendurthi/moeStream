@@ -33,6 +33,9 @@ class EngineConfig:
     tune: bool = True
     tuning_dir: str = "tuning"
     trace_tokens: int = 65536
+    kv_tier: bool = True
+    kv_dir: str = "kvcache"
+    kv_disk_gb: float = 10.0
 
     @classmethod
     def read(cls, path):
@@ -45,7 +48,7 @@ class EngineConfig:
             raise ValueError(f"{path}: pack_dir is required")
         c = cls(**raw)
         c._check()
-        for key in ("pack_dir", "calibration", "tuning_dir"):
+        for key in ("pack_dir", "calibration", "tuning_dir", "kv_dir"):
             v = getattr(c, key)
             if v is not None and not Path(v).is_absolute():
                 setattr(c, key, str(path.parent / v))
@@ -65,6 +68,9 @@ class EngineConfig:
             "tune": isinstance(self.tune, bool),
             "tuning_dir": isinstance(self.tuning_dir, str),
             "trace_tokens": _int(self.trace_tokens) and self.trace_tokens > 0,
+            "kv_tier": isinstance(self.kv_tier, bool),
+            "kv_dir": isinstance(self.kv_dir, str),
+            "kv_disk_gb": _num(self.kv_disk_gb) and self.kv_disk_gb > 0,
         }
         for key, ok in rules.items():
             if not ok:
