@@ -1,0 +1,26 @@
+[
+ {
+  "engine": "laguna",
+  "no_prefetch": false,
+  "kv_bits": 0,
+  "ctx": 32000,
+  "slots_per_layer": 64,
+  "prefill_tok_s": 77.23801866534808,
+  "plain": {
+   "ms_per_tok": 108.76337631248134,
+   "tok_s": 9.194271398186112,
+   "hit_rate": 0.7465945512820513
+  },
+  "instrumented": {
+   "ms_per_tok": 124.70170117194357,
+   "tok_s": 8.01913679285867,
+   "hit_rate": 0.7989282852564102,
+   "attn_full_ms": 31.68637200133162,
+   "attn_sliding_ms": 20.874851390999538,
+   "moe_ms": 70.46388556273087,
+   "other_ms": 1.676592216881545
+  },
+  "same_tokens": true,
+  "peak_gb": 9.53145845
+ }
+]
