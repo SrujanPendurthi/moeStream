@@ -161,3 +161,26 @@ not measured); decode after a long prompt: back to the steady ~90% hit rate at o
 **Costs.** A second code path in `StreamingMoE.__call__` (prefill vs decode), and a gather from the
 slot tensors for resident experts. The prefill transient becomes about 0.4 GB per layer
 regardless of slots, which the budget's flat 1 GB already covers.
+
+## Proposed budget change (not applied; the user decides)
+
+`moestream/budget.py` reserves a flat `activations = 1 GB`. With the fix, the measured prefill
+transient at step 2048 is `1.30 GB + 0.021 GB per 1k tokens` (`results/prefill_mem_fixed.json`;
+1.93 GB at 30k, about 4.0 GB at 128k). Proposal: `activations = 1.3 GB + 0.021 GB x context_tokens / 1000`,
+computed from `context_tokens` in `cap_budget_bytes` and `slot_budget_bytes`.
+
+Effect at `memory_gb = 14`, q8 KV (slot GB):
+
+| context_tokens | today (flat 1 GB, KV for 2 sessions) | proposal, KV for 2 sessions | proposal, KV for 1 session |
+|---|---|---|---|
+| 32,768 | 10.41 | 9.43 | 10.14 |
+| 131,072 | 6.14 | 3.08 | 5.94 |
+
+At 128k the proposal alone halves the slots. The third column pairs it with reserving KV for one
+session instead of two: with the SSD tier, a second conversation's KV can live on disk instead of
+in RAM (restores measured 0.15-0.73 s for 5.5k-13k tokens), which gives back 2.85 GB at 128k and
+keeps slots near today's. That is a second decision, also not applied.
+
+Outside `memory_gb` either way, and worth stating in the docs: MLX's buffer pool (`mlx_cache_gb`,
+1 GiB) and the prefetch staging buffers (up to 1.1 GB), measured together as the ~1.8 GB of
+footprint above MLX's peak.
