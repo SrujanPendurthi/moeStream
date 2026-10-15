@@ -222,6 +222,9 @@ class Store:
                     self.writing = False
                     log("writes off until restart")
             finally:
+                # the job's arrays share the cache's buffers: holding them until the next job kept
+                # a whole turn's KV alive between requests (~3.4 GB at bf16, 81k tokens)
+                job = None
                 with self.cv:
                     self.busy = False
                     self.cv.notify_all()

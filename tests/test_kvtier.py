@@ -362,3 +362,23 @@ def test_a_crash_mid_wipe_keeps_the_old_format_so_the_next_start_wipes_again(tmp
     monkeypatch.setattr(kvtier, "write_atomic", real)
     s = Store(tmp_path / "kv", "v1 test kv0")
     assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]
+
+
+def test_the_writer_lets_go_of_a_written_snapshot(tmp_path):
+    """The snapshot shares the live cache's buffers; once written, nothing in the tier may keep them
+    (it kept the last turn's whole KV, ~3.4 GB at bf16 81k, until the next save)."""
+    import gc
+
+    s = Store(tmp_path / "kv", FP)
+    cache = _make(0)
+    _grow(cache, 4096)                                  # 2 x 1 x 2 x 4096 x 32 bf16: 1 MB per layer
+    mx.eval([c.state for c in cache])
+    s.save(list(range(4096)), cache)
+    s.flush()
+    gc.collect()
+    mx.clear_cache()
+    before = mx.get_active_memory()
+    del cache
+    gc.collect()
+    mx.clear_cache()
+    assert before - mx.get_active_memory() > 500_000    # the cache's buffers were freed
