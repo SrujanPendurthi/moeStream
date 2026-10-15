@@ -3,6 +3,7 @@
 Work runs in bounded slices (one chunk of tokens per step) so it can share mlx-lm's generation
 thread with live requests.
 """
+import json
 import os
 from pathlib import Path
 
@@ -47,12 +48,13 @@ class Guard:
     def __init__(self, model, prompts, path, key, total=2048, chunk=128, k=K, th=THRESHOLDS):
         self.model, self.path, self.key, self.chunk, self.k, self.th = model, Path(path), key, chunk, k, th
         self.ready = self.math_ok = False
-        self._run = None
+        self._run, self.noise = None, None
         try:
             z = np.load(self.path)
             if str(z["key"]) == key:
                 self.seqs, self.ref = z["seqs"], (z["ids"], z["logp"])
                 self.math_ok, self.ready = bool(z["math_ok"]), True
+                self.noise = json.loads(str(z["noise"])) if "noise" in z else None
         except Exception:  # missing or unreadable: rebuild
             pass
         if not self.ready:
@@ -96,10 +98,11 @@ class Guard:
             yield
         self.ref = tuple(np.concatenate(a) for a in zip(*parts))
         v = yield from self._compare()
-        self.math_ok = quiet(v, self.th)
+        self.math_ok, self.noise = quiet(v, self.th), v
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(self.path.stem + ".tmp.npz")
-        np.savez(tmp, key=self.key, seqs=self.seqs, ids=self.ref[0], logp=self.ref[1], math_ok=self.math_ok)
+        np.savez(tmp, key=self.key, seqs=self.seqs, ids=self.ref[0], logp=self.ref[1], math_ok=self.math_ok,
+                 noise=json.dumps(v))
         os.replace(tmp, self.path)  # a crash mid-write never leaves a reference that fails to load
         self.ready = True
 

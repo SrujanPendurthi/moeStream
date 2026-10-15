@@ -84,3 +84,13 @@ def test_corrupt_reference_file_is_rebuilt_not_fatal(model, tmp_path):
     while not g.ready:
         g.step()
     assert g.math_ok and not list(tmp_path.glob("*.tmp*"))
+
+
+def test_noise_numbers_are_kept_with_the_reference(model, tmp_path):
+    prompts = [list(np.random.default_rng(s).integers(0, TINY["vocab_size"], 5)) for s in range(3)]
+    g = Guard(model, prompts, tmp_path / "ref.npz", "k1", total=48, chunk=8)
+    while not g.ready:
+        g.step()
+    assert set(g.noise) == {"kl_mean", "kl_p99", "top1", "ok"}
+    again = Guard(model, prompts, tmp_path / "ref.npz", "k1", total=48, chunk=8)
+    assert again.noise == g.noise  # loaded with the reference: a failed check says by how much
