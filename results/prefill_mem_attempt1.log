@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/prefill_mem.py", line 106, in <module>
+    main()
+    ~~~~^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/prefill_mem.py", line 92, in main
+    model, tok = load(cfg)
+                 ~~~~^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/moestream/load.py", line 32, in load
+    return load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
+                target_ctx=2 * c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction, floor=floor)
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/moestream/load.py", line 35, in load
+    config = json.loads((pack_dir / "config.json").read_text())
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py", line 546, in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py", line 632, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py", line 537, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'results/../lagunaLab/models/Laguna-XS-2.1-packed/config.json'
+watch: peak swap 397 MB, peak footprint 323 MB

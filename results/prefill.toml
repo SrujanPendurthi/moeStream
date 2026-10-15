@@ -1,8 +1,8 @@
-pack_dir = "../lagunaLab/models/Laguna-XS-2.1-packed"
+pack_dir = "/Users/srujanpendurthi/Projects/Current/lagunaLab/models/Laguna-XS-2.1-packed"
 memory_gb = 12.0
 context_tokens = 32768
 kv_bits = 8
-calibration = "../budget.json"
+calibration = "/Users/srujanpendurthi/Projects/Current/moeStream/budget.json"
 thinking = false
 tune = false
 kv_tier = false
