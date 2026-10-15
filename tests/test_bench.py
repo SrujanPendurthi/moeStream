@@ -53,3 +53,19 @@ def test_equal_memory_gives_both_loaders_the_same_slot_bytes():
     assert budget == 20 * GB - 1 * GB - KV_BYTES_PER_TOKEN * 32768 - 1 * GB
     assert lab == budget // (39 * 1769472) and lab * 39 * 1769472 <= budget
     assert equal_memory(200, 1 * GB, 39, 1769472, 256)[1] == 256  # clamps to num_experts
+
+
+def test_cache_limit_reaches_both_engines(monkeypatch):
+    import tools.bench as bench
+
+    calls = []
+    monkeypatch.setattr("laguna_mlx.streaming.load_streaming", lambda pack, slots, cache_limit_gb=None: calls.append(("lab", slots, cache_limit_gb)) or ("m", "t"))
+    monkeypatch.setattr("moestream.load.load", lambda pack, **k: calls.append(("mine", k["budget_gb"])) or ("m", "t"))
+    monkeypatch.setattr(mx, "set_cache_limit", lambda n: calls.append(("pool", n)) or 0)
+    bench.lab_loader("p", 32, 1.0)()
+    bench.my_loader("p", 1.0, budget_gb=9.0)()
+    assert calls == [("lab", 32, 1.0), ("pool", 1 << 30), ("mine", 9.0)]
+    calls.clear()
+    bench.lab_loader("p", 32, None)()
+    bench.my_loader("p", None, budget_gb=9.0)()
+    assert calls == [("lab", 32, None), ("mine", 9.0)]          # default: pools left alone

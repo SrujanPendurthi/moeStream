@@ -1,6 +1,6 @@
 """Decode speed, hit rate, prediction accuracy and time split: lagunaLab streaming vs moeStream.
 
-PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base] [--no-prefetch] [--cap-gb X]
+PYTHONPATH=.:../lagunaLab python3 -m tools.bench [--cold] [--budget-gb X] [--slots N] [--eval-writes] [--no-base] [--no-prefetch] [--cap-gb X] [--cache-limit-gb X]
 Loads real weights one model at a time: message the other sessions and wait for a go-ahead first.
 """
 import argparse
@@ -58,6 +58,23 @@ def long_ctx(model, ids, gen=64, chunk=2048):
             "decode_ctx_tok_s": gen / (time.perf_counter() - t0)}
 
 
+def lab_loader(pack, slots, cache_limit_gb):
+    from laguna_mlx.streaming import load_streaming
+
+    return lambda: load_streaming(pack, slots, cache_limit_gb=cache_limit_gb)
+
+
+def my_loader(pack, cache_limit_gb, **kw):
+    """cache_limit_gb caps MLX's free-buffer pool as lagunaLab's load_streaming does (GiB); None leaves it."""
+    def _load():
+        from moestream.load import load
+
+        if cache_limit_gb is not None:
+            mx.set_cache_limit(int(cache_limit_gb * (1 << 30)))
+        return load(pack, **kw)
+    return _load
+
+
 def evict_page_cache(paths):
     """Cold-cache approximation without sudo: stream unrelated big files through the page cache."""
     for f in paths:
@@ -67,10 +84,8 @@ def evict_page_cache(paths):
 
 
 def main():
-    from laguna_mlx.streaming import load_streaming
     from laguna_mlx.streaming import stream_stats as lab_stats
     from moestream.layer import stream_stats
-    from moestream.load import load
     from scripts.check_parity import PROMPTS
 
     p = argparse.ArgumentParser()
@@ -86,6 +101,8 @@ def main():
     p.add_argument("--no-prefetch", action="store_true", help="diagnostic: no lookahead prediction or prefetch")
     p.add_argument("--cap-gb", type=float, default=None,
                    help="equal memory: both loaders get the slot bytes left under this total cap")
+    p.add_argument("--cache-limit-gb", type=float, default=None,
+                   help="cap MLX's free-buffer pool for both engines (lagunaLab's load_streaming cache_limit_gb)")
     a = p.parse_args()
     lab_slots = 32
     if a.cap_gb:
@@ -129,9 +146,10 @@ def main():
 
     base = None
     if not a.no_base:
-        base, base_outs = run(f"lagunaLab slots={lab_slots}", lambda: load_streaming(a.pack, lab_slots), lab_stats)
+        base, base_outs = run(f"lagunaLab slots={lab_slots}", lab_loader(a.pack, lab_slots, a.cache_limit_gb), lab_stats)
     def load_mine():
-        model, tok = load(a.pack, slots=a.slots, budget_gb=a.budget_gb, calibration=a.calibration)
+        model, tok = my_loader(a.pack, a.cache_limit_gb, slots=a.slots, budget_gb=a.budget_gb,
+                               calibration=a.calibration)()
         if a.no_prefetch:
             for l in model.layers:
                 if hasattr(l.mlp, "io"):
@@ -143,7 +161,7 @@ def main():
         mine["identical_to_lagunaLab"] = my_outs == base_outs
         mine["speedup_vs_lagunaLab"] = mine["decode_tok_s"] / base["decode_tok_s"]
     mine["ctx_decode_ratio"] = mine["decode_ctx_tok_s"] / mine["decode_tok_s"]
-    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "") + ("_noprefetch" if a.no_prefetch else "") + (f"_cap{a.cap_gb:g}" if a.cap_gb else "")
+    tag = ("_cold" if a.cold else "") + (f"_slots{a.slots}" if a.slots else "") + ("_evalwrites" if a.eval_writes else "") + ("_nobase" if a.no_base else "") + ("_noprefetch" if a.no_prefetch else "") + (f"_cap{a.cap_gb:g}" if a.cap_gb else "") + (f"_pool{a.cache_limit_gb:g}" if a.cache_limit_gb is not None else "")
     out = Path("results") / f"bench{tag}.json"
     out.write_text(json.dumps({"rows": [r for r in (base, mine) if r], "cold": a.cold}, indent=1))
 
