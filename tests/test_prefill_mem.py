@@ -30,3 +30,13 @@ def test_fit_recovers_a_line_per_step():
     f = fit(rows)
     assert abs(f[512]["gb"] - 1.5) < 1e-9 and abs(f[512]["gb_per_1k_tokens"] - 0.05) < 1e-9
     assert abs(f[2048]["gb_per_1k_tokens"] - 0.2) < 1e-9
+
+
+def test_sweep_warms_up_before_the_first_measured_point(tmp_path):
+    from tools.prefill_mem import sweep
+
+    m = Fake()
+    rows = sweep(m, list(range(300)), [128], [500], tmp_path / "out.json", warmup=256)
+    assert m.calls[:2] == [128, 127]                     # warm-up prefill, not recorded
+    assert [(r["step"], r["tokens"]) for r in rows] == [(128, 500)]
+    assert (tmp_path / "out.json").exists()

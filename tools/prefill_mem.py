@@ -5,7 +5,7 @@ usage: PYTHONPATH=.:../lagunaLab python3 -m tools.prefill_mem --config results/p
 
 Loads exactly as tools.serve does (EngineConfig, mlx_cache_gb pool cap, q8 KV caches), then for each
 step size (smallest first) and prompt length (shortest first) prefills a fresh cache through mlx-lm's
-generate_step, as the server does, and records MLX's peak over the active memory before it, top's
+generate_step, as the server does, after one unrecorded 2k-token warm-up, and records MLX's peak over the active memory before it, top's
 MEM for the process, and prefill tok/s. Rows are written after each point, so a watchdog abort keeps
 what finished. The fit per step is peak - active = a + b * tokens, the activation term the budget
 reserves as a flat 1 GB today.
@@ -76,6 +76,20 @@ def fit(rows):
     return out
 
 
+def sweep(model, base, steps, ctxs, out, warmup=2048, meta=None):
+    """One unrecorded warm-up prefill (the slots fill during the first one, so a cold baseline would
+    count them as transient), then every step x length, smallest first, saved after each point."""
+    measure(model, (base * (warmup // len(base) + 1))[:warmup], steps[0])
+    rows = []
+    for step in steps:
+        for n in ctxs:
+            ids = (base * (n // len(base) + 1))[:n]
+            rows.append(measure(model, ids, step))
+            print(rows[-1], flush=True)
+            Path(out).write_text(json.dumps({**(meta or {}), "rows": rows, "fit": fit(rows)}, indent=1))
+    return rows
+
+
 def main():
     from moestream.config import EngineConfig
     from moestream.load import load
@@ -91,14 +105,8 @@ def main():
     cap_buffer_pool(cfg.mlx_cache_gb)
     model, tok = load(cfg)
     text = Path("../lagunaLab/tests/reference/modeling_laguna.py").read_text()  # tools.bench's long prompt
-    base = tok.encode(text)
-    rows = []
-    for step in map(int, a.steps.split(",")):
-        for n in map(int, a.ctx.split(",")):
-            ids = (base * (n // len(base) + 1))[:n]
-            rows.append(measure(model, ids, step))
-            print(rows[-1], flush=True)
-            Path(a.out).write_text(json.dumps({"memory_gb": cfg.memory_gb, "rows": rows, "fit": fit(rows)}, indent=1))
+    rows = sweep(model, tok.encode(text), [int(s) for s in a.steps.split(",")],
+                 [int(n) for n in a.ctx.split(",")], a.out, meta={"memory_gb": cfg.memory_gb})
     print("fit:", fit(rows), flush=True)
 
 
