@@ -56,6 +56,8 @@ def test_absolute_paths_are_kept(tmp_path):
     ("kv_disk_gb = 0", "kv_disk_gb"),
     ('kv_tier = "on"', "kv_tier"),
     ("mlx_cache_gb = -1", "mlx_cache_gb"),
+    ("kv_sessions = 0", "kv_sessions"),
+    ('lookahead = "no"', "lookahead"),
 ])
 def test_bad_values_raise_naming_the_key(tmp_path, line, key):
     with pytest.raises(ValueError, match=key):
@@ -74,6 +76,11 @@ def test_mlx_buffer_pool_cap_defaults_to_1_gb(tmp_path):
     assert EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n')).mlx_cache_gb == 1.0
     assert EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\nmlx_cache_gb = 0\n')).mlx_cache_gb == 0
     assert EngineConfig.read(REPO / "moestream.toml").mlx_cache_gb == 1.0
+
+
+def test_lookahead_and_kv_sessions_default_to_todays_behaviour(tmp_path):
+    c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
+    assert c.lookahead is True and c.kv_sessions == 2
 
 
 @pytest.mark.parametrize("line", ["tune = 1", "trace_tokens = 0", "tuning_dir = 3"])

@@ -8,7 +8,8 @@
 # mlx-lm's timestamped prompt-progress lines (prefill time). Any failure stops the whole run.
 # SERVE overrides the server command (dry run against a stub); WATCH the watchdog caps (default "4 17");
 # MEM the memory_gb (default 14.0); STEP the prefill step size (mlx-lm default 2048); BACK how many turns
-# before the session's end to start (default 4); MOESTREAM_PREFILL_SET=1 passes through to the server.
+# before the session's end to start (default 4); KV_BITS the kv_bits (default 8); LOOKAHEAD true|false (default
+# true); SESSIONS kv_sessions (default 2); MOESTREAM_PREFILL_SET=1 passes through to the server.
 set -u
 cd "$(dirname "$0")/.."
 REPO=$(pwd)
@@ -18,6 +19,9 @@ SERVE=${SERVE:-"$REPO/../.gpu/gpu-run moe tools/watch.sh $WATCH python3 -m tools
 SESSION=django__django-11039.jsonl
 MEM=${MEM:-14.0}
 BACK=${BACK:-4}
+KVB=${KV_BITS:-8}
+LOOKAHEAD=${LOOKAHEAD:-true}
+SESSIONS=${SESSIONS:-2}
 STEP=${STEP:+--prefill-step-size $STEP}
 mkdir -p "$OUT"
 KV=$(cd "$OUT" && pwd)/kvcache
@@ -26,7 +30,9 @@ cat > "$OUT/longctx.toml" <<EOF
 pack_dir = "$REPO/../lagunaLab/models/Laguna-XS-2.1-packed"
 memory_gb = $MEM
 context_tokens = 131072
-kv_bits = 8
+kv_bits = $KVB
+lookahead = $LOOKAHEAD
+kv_sessions = $SESSIONS
 calibration = "$REPO/budget.json"
 thinking = true
 tune = false

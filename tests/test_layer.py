@@ -354,3 +354,18 @@ def test_prefill_chunks_evaluated_as_mlx_lm_does_do_not_pile_up_slot_writes(pack
         mx.clear_cache()
         active.append(mx.get_active_memory())
     assert active[-1] - active[2] < 9 * 2000      # was ~25 KB per chunk
+
+
+def test_kv_sessions_1_reserves_kv_for_the_live_session_only(packed, monkeypatch):
+    out, _ = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
+    load(EngineConfig(pack_dir=str(out), memory_gb=3.0, kv_bits=0, context_tokens=32768, kv_sessions=1))
+
+
+def test_lookahead_false_turns_lookahead_off_on_every_layer(packed, monkeypatch):
+    out, _ = packed
+    monkeypatch.setattr("moestream.load.free_bytes", lambda: 10**12)
+    m, _ = load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0, context_tokens=1024, lookahead=False))
+    assert all(not moe.io.lookahead for moe in _moe(m))
+    assert all(moe.io.lookahead for moe in _moe(load(EngineConfig(pack_dir=str(out), memory_gb=8.0, kv_bits=0,
+                                                                   context_tokens=1024))[0]))

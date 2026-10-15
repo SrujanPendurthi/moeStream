@@ -37,6 +37,8 @@ class EngineConfig:
     kv_dir: str = "kvcache"
     kv_disk_gb: float = 10.0
     mlx_cache_gb: float = 1.0
+    lookahead: bool = True
+    kv_sessions: int = 2
 
     @classmethod
     def read(cls, path):
@@ -73,6 +75,8 @@ class EngineConfig:
             "kv_dir": isinstance(self.kv_dir, str),
             "kv_disk_gb": _num(self.kv_disk_gb) and self.kv_disk_gb > 0,
             "mlx_cache_gb": _num(self.mlx_cache_gb) and self.mlx_cache_gb >= 0,
+            "lookahead": isinstance(self.lookahead, bool),
+            "kv_sessions": _int(self.kv_sessions) and self.kv_sessions >= 1,
         }
         for key, ok in rules.items():
             if not ok:

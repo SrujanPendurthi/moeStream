@@ -28,9 +28,16 @@ def load(pack_dir, *, slots=None, budget_gb=None, memory_gb=None, calibration=No
          target_ctx=32768, kv_bits=0, eviction="lfu", floor=16):
     if isinstance(pack_dir, EngineConfig):
         c = pack_dir
-        # served: KV for the live session plus one stored conversation cache (tools/serve.py caps those)
-        return load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
-                    target_ctx=2 * c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction, floor=floor)
+        # served: KV for kv_sessions sessions, by default the live one plus one stored conversation
+        # cache (tools/serve.py caps those); 1 leaves other conversations to the SSD tier
+        model, tok = load(c.pack_dir, memory_gb=c.memory_gb, calibration=c.calibration, half_life=c.half_life,
+                          target_ctx=c.kv_sessions * c.context_tokens, kv_bits=c.kv_bits, eviction=c.eviction,
+                          floor=floor)
+        if not c.lookahead:  # the tuner's per-layer lookahead knob, all off
+            for l in model.layers:
+                if hasattr(l.mlp, "io"):
+                    l.mlp.io.lookahead = False
+        return model, tok
     pack_dir = Path(pack_dir)
     config = json.loads((pack_dir / "config.json").read_text())
     layout = json.loads((pack_dir / "layout.json").read_text())
