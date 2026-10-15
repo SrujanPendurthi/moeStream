@@ -276,3 +276,12 @@ def test_the_check_script_keeps_its_cache_under_its_results_dir():
 
     s = Path("tools/kvtier_check.sh").read_text()
     assert 'KV=$(cd "$OUT" && pwd)/kvcache' in s and "KV=$REPO/kvcache" not in s
+
+
+def test_prefill_set_env_turns_on_the_layer_flag(tmp_path, monkeypatch):
+    import moestream.layer as layer
+
+    monkeypatch.setattr(layer, "PREFILL_SET", False)
+    monkeypatch.setenv("MOESTREAM_PREFILL_SET", "1")
+    _tiered(tmp_path, monkeypatch)
+    assert layer.PREFILL_SET is True

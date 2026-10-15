@@ -84,6 +84,10 @@ def patch_server(server, cfg):
     slice of tuner work whenever the generation thread polls an empty request queue."""
     lru = server.LRUPromptCache
     server.load = make_loader(cfg)
+    if os.environ.get("MOESTREAM_PREFILL_SET") == "1":  # experimental, off by default (docs/prefill-memory.md)
+        import moestream.layer
+
+        moestream.layer.PREFILL_SET = True
     memlog = os.environ.get("MOESTREAM_MEMLOG")
 
     def mem(event, **kw):
