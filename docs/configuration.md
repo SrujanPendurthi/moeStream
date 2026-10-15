@@ -27,6 +27,7 @@ directory. Unknown keys and wrongly typed values are errors at startup, never si
 | `lookahead` | true | next-layer lookahead prefetch while decoding (the tuner can turn it off per layer); false turns it off everywhere. Measured at 32k / 64 slots: ~20 ms per token slower with it on (docs/long-context.md) |
 | `kv_sessions` | 2 | sessions of `context_tokens` KV the memory budget reserves: the live one plus one stored conversation; 1 leaves stored conversations to the SSD tier |
 | `prompt_cache_entries` | 6 | conversations mlx-lm's RAM prompt cache keeps (its `--prompt-cache-size`; its byte cap is one session of KV either way); 1 leaves the rest to the SSD tier |
+| `release_merged_caches` | false | on mlx-lm's batched path (bf16 KV), empty a request's fetched cache once it is merged into the batch, so one KV copy less is held between turns; logs a line at startup when on. Experimental (docs/long-context.md) |
 | `mlx_cache_gb` | 1.0 | cap on MLX's pool of freed buffers kept for reuse; 0 = MLX's default (no cap). Uncapped, the pool grows past `memory_gb` and pushes expert files out of the page cache; capped, decode is faster too (short decode 12.7 to 17.3 tok/s at 14.4 GB, README) |
 
 Environment variables for the server: `MOESTREAM_SHARED=1` drops mlx-lm's wired-memory limit, for a
