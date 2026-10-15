@@ -1,0 +1,5 @@
+[07:32:50] phase long: start
+aborted: paging (swap 810 MB, footprint 18432 MB; caps 4 GB / 17 GB)
+watch: peak swap 810 MB, peak footprint 18432 MB
+[07:57:08] FAILED: watchdog (results/longctx_bf16_evict14/serve_long.log); stopping the run
+[07:57:13] left running (want none):

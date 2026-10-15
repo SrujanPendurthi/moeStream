@@ -215,3 +215,25 @@ It is there after a cold turn too (turn 0: no fetched cache, nothing merged).
 
 `release_evicted_caches` (f09564c, default false) empties an entry's arrays when the prompt cache
 drops it, which would free that copy. Built and tested on the tiny model; not yet run on real weights.
+
+## Last two 81k runs: `release_evicted_caches` (2026-10-15)
+
+| | run 4: writer fix, 12 GB | run 6: + `release_evicted_caches`, 12 GB | run 7: same, **14 GB** |
+|---|---|---|---|
+| results | `longctx_bf16_fix12/` | `longctx_bf16_evict12/` | `longctx_bf16_evict14/` |
+| slots | 4.47 GB | 4.47 GB | 6.46 GB |
+| MLX active between turns | 12.4 GB | **9.0-9.1 GB** | 11.0 GB after turn 0 |
+| MLX peak | 14.31 GB | **12.87 GB** | 14.79 GB (turn 0) |
+| footprint / swap | 15.0 / 0.45 GB | 14.0 / 0.42 GB | **18.4 / 0.81 GB: watchdog abort** |
+| SSD restore after restart | (mixed run) | 82,074 tokens in 1.56 s | not reached |
+
+- `release_evicted_caches` removes the stray copy: at `memory_gb = 12`, bf16 81k now holds one KV copy
+  between turns (9.0 GB = resident 1.16 + slots 4.47 + KV 3.4) and peaks at 12.87 GB.
+- At `memory_gb = 14` the watchdog stopped the run in turn 1 (footprint 18.4 GB against the 17 GB cap).
+  Turn 1's end-of-prompt insert showed active 14.39 GB, 3.4 GB above the 12 GB run's equivalent row:
+  one more KV copy that the 12 GB run did not show at that point, not explained yet. Footprint runs
+  ~1.5-3.5 GB above MLX's peak (pool, staging buffers).
+
+**Where this leaves bf16 at 81k (parked, as agreed):** fits at `memory_gb = 12` with
+`release_evicted_caches = true` (decode ~4.3-5.0 tok/s vs q8's 3.1-3.3, footprint 14.0 GB); does not
+fit at 14 under a 17 GB watchdog. q8 stays the shipped default (81k at 13.0 GB footprint, 14 GB).
