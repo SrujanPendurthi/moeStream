@@ -196,3 +196,22 @@ never reads them after the merge and the prompt cache holds its own copy). Expec
 and ~12.4 GB peak at 81k bf16, which would let `memory_gb = 14` fit. q8 takes the single path,
 which merges nothing, so it is unaffected. The `memory_gb = 14` run was not done: its condition
 (peak <= 13 GB) was not met.
+
+## Fifth 81k run: `release_merged_caches` (2026-10-15, `results/longctx_bf16_rel12/`)
+
+Run 4's config plus `release_merged_caches = true`. **Long phase only:** I edited
+`tools/longctx_check.sh` (a new knob) while this run's copy was executing; bash reads a script as
+it goes, so it skipped the end of the long phase and started a second server without stopping the
+first. Everything was stopped by PID at 07:02; the restart phase did not run. Lesson: never edit a
+script while a run of it is going (copy it per run).
+
+Long phase (3 turns): MLX peak **14.31 GB, unchanged from run 4**; active after each turn 12.4-12.5 GB;
+footprint 15.0 GB, swap 0.43 GB. So emptying merged caches had no measurable effect. The live-KV
+inventory (all turns this time) shows the copy that remains: after each turn's final insert, 20
+full-attention `KVCache` objects (6.6-6.7 GB): the prompt cache's one entry plus the end-of-prompt
+cache, which the final insert evicts but mlx-lm's batched path still holds in the loop variable of
+its segment-insert loop (`for uid, (cache, cache_key) in caches.items()`), until the next turn.
+It is there after a cold turn too (turn 0: no fetched cache, nothing merged).
+
+`release_evicted_caches` (f09564c, default false) empties an entry's arrays when the prompt cache
+drops it, which would free that copy. Built and tested on the tiny model; not yet run on real weights.

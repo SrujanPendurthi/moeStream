@@ -1,0 +1,3 @@
+{"tag": "long", "session": "../lagunaLab/traces/django__django-11039.jsonl", "turn": 0, "t": 1792072328.5, "s": 1500.28, "prompt_tokens": 80583, "cached_tokens": 0, "completion_tokens": 340, "finish": "tool_calls"}
+{"tag": "long", "session": "../lagunaLab/traces/django__django-11039.jsonl", "turn": 1, "t": 1792072421.9, "s": 88.33, "prompt_tokens": 81054, "cached_tokens": 80923, "completion_tokens": 378, "finish": "tool_calls"}
+{"tag": "long", "session": "../lagunaLab/traces/django__django-11039.jsonl", "turn": 2, "t": 1792072600.0, "s": 173.13, "prompt_tokens": 81636, "cached_tokens": 81432, "completion_tokens": 642, "finish": "tool_calls"}

@@ -1,0 +1,3 @@
+[06:27:04] phase long: start
+tools/longctx_check.sh: line 88: y: command not found
+exit 143
