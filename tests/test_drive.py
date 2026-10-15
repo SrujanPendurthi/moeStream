@@ -70,3 +70,15 @@ def test_probes_are_greedy_and_do_not_advance_the_conversation(tmp_path, monkeyp
     live(state, ["a"], rounds=0, url="u", log=tmp_path / "l", tag="restart", pause=0, probe=tmp_path / "p2.json")
     assert json.loads((tmp_path / "p2.json").read_text()) == {"a": ["live 4"]}
     assert json.loads(state.read_text())["a"]["history"][-1]["content"] == "t1"
+
+
+def test_a_reply_with_only_tool_calls_and_no_content_key_is_kept(tmp_path, monkeypatch):
+    import tools.drive as drive
+
+    call = [{"id": "c", "type": "function", "function": {"name": "bash", "arguments": "{}"}}]
+    monkeypatch.setattr(drive, "_session", lambda f: ([dict(m) for m in SESSION], []))
+    monkeypatch.setattr(drive, "_post", lambda url, body: {   # mlx-lm 0.31.3 omits content on tool calls
+        "choices": [{"message": {"role": "assistant", "tool_calls": call}, "finish_reason": "tool_calls"}], "usage": {}})
+    drive.live(tmp_path / "s.json", ["a"], rounds=1, url="u", log=tmp_path / "l", tag="on", pause=0)
+    import json
+    assert json.loads((tmp_path / "s.json").read_text())["a"]["history"][2] == {"role": "assistant", "content": "", "tool_calls": call}

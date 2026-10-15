@@ -96,8 +96,8 @@ def live(state, files, rounds, url, log, tag, pause=5, max_tokens=1024, probe_af
                                      "completion_tokens": u.get("completion_tokens"),
                                      "finish": c.get("finish_reason")}) + "\n")
             m = c["message"]
-            s["history"].append({k: m[k] for k in ("role", "content", "reasoning", "tool_calls") if m.get(k) is not None
-                                 or k == "content"})
+            s["history"].append({"role": "assistant", "content": m.get("content") or "",
+                                 **{k: m[k] for k in ("reasoning", "tool_calls") if m.get(k)}})
             j = s["next"] + 1
             while j < len(msgs) and msgs[j]["role"] != "assistant":
                 s["history"].append(msgs[j])
