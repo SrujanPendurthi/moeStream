@@ -18,12 +18,17 @@ directory. Unknown keys and wrongly typed values are errors at startup, never si
 | `calibration` | none (uniform split) | `budget.json` from `tools.calibrate`: per-layer miss curves for the slot split, and the half-life |
 | `thinking` | true | Laguna's built-in `<think>` reasoning (chat template `enable_thinking`) |
 | `port` | 8081 | server port |
-| `tune` | true | run the self-tuner; false serves with the saved tuning state and never trials |
+| `tune` | false | run the self-tuner; false serves with the saved tuning state and never trials. Off by default: its gate is not met yet ([self-tuning.md](self-tuning.md)) |
 | `tuning_dir` | `"tuning"` | tuning state, log and quality reference |
 | `trace_tokens` | 65536 | routing rows kept in memory per layer for replay trials |
 | `kv_tier` | true | SSD tier for the prompt cache: turn-end KV snapshots on disk, restored instead of re-processing a prompt ([serving.md](serving.md#ssd-tier)) |
 | `kv_dir` | `"kvcache"` | the tier's directory (git-ignored); a non-empty directory without the tier's `FORMAT` file is refused, never wiped |
 | `kv_disk_gb` | 10.0 | disk cap; above it whole conversations are deleted, least recently used first |
+| `mlx_cache_gb` | 1.0 | cap on MLX's pool of freed buffers kept for reuse; 0 = MLX's default (no cap). Uncapped, the pool grows past `memory_gb` and pushes expert files out of the page cache; capped, decode is faster too (short decode 12.7 to 17.3 tok/s at 14.4 GB, README) |
+
+Environment variables for the server: `MOESTREAM_SHARED=1` drops mlx-lm's wired-memory limit, for a
+machine that is also in use (the pool cap above applies either way); `MOESTREAM_MEMLOG=<file>`
+appends MLX memory (active, cache, peak) per request.
 
 The shipped file:
 
@@ -36,12 +41,13 @@ eviction = "lfu"
 calibration = "budget.json"
 thinking = true
 port = 8081
-tune = true
+tune = false
 tuning_dir = "tuning"
 trace_tokens = 65536
 kv_tier = true
 kv_dir = "kvcache"
 kv_disk_gb = 10.0
+mlx_cache_gb = 1.0
 ```
 
 ## What fits: worked examples
@@ -73,7 +79,7 @@ Rules of thumb:
 
 Every key takes effect at server start. Restart the server after editing the file.
 
-With `tune = true`, the tuner may change `eviction`, `half_life` and the slot split while serving, and
+With `tune = true` (off by default), the tuner may change `eviction`, `half_life` and the slot split while serving, and
 saves what it learned in `tuning/state.json`. **Saved tuning state wins over the TOML** for those three
 settings on the next start, as long as the pack, `memory_gb`, `kv_bits` and `context_tokens` are
 unchanged. To make a TOML edit of `eviction` or `half_life` stick, delete `tuning/state.json` (or set

@@ -217,17 +217,28 @@ def test_a_restore_error_falls_back_to_a_full_prefill(tmp_path, monkeypatch):
     assert torn not in store.chains and not (tmp_path / "kv" / torn).exists()
 
 
-def test_shared_machine_mode_drops_the_wired_limit_and_caps_the_buffer_pool(monkeypatch):
+def test_shared_machine_mode_drops_the_wired_limit(monkeypatch):
+    import mlx.core as mx
+
+    import tools.serve as serve
+
+    limits = []
+    monkeypatch.setattr(mx, "set_wired_limit", lambda n: limits.append(("wired", n)) or 0)
+    serve.shared_machine()
+    mx.set_wired_limit(1 << 34)                       # what mlx-lm does at start and per generation
+    assert limits == []
+
+
+@pytest.mark.parametrize("gb, want", [(1.0, [1 << 30]), (0.5, [1 << 29]), (0, [])])
+def test_buffer_pool_cap_comes_from_the_config(monkeypatch, gb, want):
     import mlx.core as mx
 
     import tools.serve as serve
 
     limits = []
     monkeypatch.setattr(mx, "set_cache_limit", lambda n: limits.append(n) or 0)
-    monkeypatch.setattr(mx, "set_wired_limit", lambda n: limits.append(("wired", n)) or 0)
-    serve.shared_machine()
-    mx.set_wired_limit(1 << 34)                       # what mlx-lm does at start and per generation
-    assert limits == [1 << 30]
+    serve.cap_buffer_pool(gb)
+    assert limits == want
 
 
 def test_each_request_logs_mlx_memory_when_asked(tmp_path, monkeypatch):

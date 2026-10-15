@@ -30,12 +30,13 @@ class EngineConfig:
     calibration: str | None = None
     thinking: bool = True
     port: int = 8081
-    tune: bool = True
+    tune: bool = False
     tuning_dir: str = "tuning"
     trace_tokens: int = 65536
     kv_tier: bool = True
     kv_dir: str = "kvcache"
     kv_disk_gb: float = 10.0
+    mlx_cache_gb: float = 1.0
 
     @classmethod
     def read(cls, path):
@@ -71,6 +72,7 @@ class EngineConfig:
             "kv_tier": isinstance(self.kv_tier, bool),
             "kv_dir": isinstance(self.kv_dir, str),
             "kv_disk_gb": _num(self.kv_disk_gb) and self.kv_disk_gb > 0,
+            "mlx_cache_gb": _num(self.mlx_cache_gb) and self.mlx_cache_gb >= 0,
         }
         for key, ok in rules.items():
             if not ok:

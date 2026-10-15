@@ -8,9 +8,10 @@ eviction = "lfu"          # lfu | lru | fifo
 calibration = "budget.json"
 thinking = true           # Laguna's built-in <think> reasoning; the model's own default is on
 port = 8081
-tune = true               # false = serve with the saved tuning state, never trial
+tune = false              # true = the self-tuner runs trials while serving; false = saved tuning state only
 tuning_dir = "tuning"     # tuning state, log and quality reference
 trace_tokens = 65536      # routing rows kept per layer for replay
 kv_tier = true            # SSD tier for the prompt cache: restore a conversation's KV instead of re-prefilling
 kv_dir = "kvcache"        # its directory (git-ignored)
 kv_disk_gb = 10.0         # whole conversations pruned, oldest use first, above this
+mlx_cache_gb = 1.0        # cap on MLX's free-buffer pool; 0 = MLX default (uncapped)

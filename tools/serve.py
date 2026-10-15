@@ -153,13 +153,21 @@ def patch_server(server, cfg):
     server.ResponseGenerator._next_request = _next_request
 
 
-def shared_machine():
-    """No wired limit (mlx-lm sets one at start and around every generation) and MLX's free-buffer
-    pool capped at 1 GB, so the footprint stays near memory_gb while the machine is in use
-    (lagunaLab a1ca51e: the pool inflated the footprint past its watchdog)."""
+def cap_buffer_pool(gb):
+    """Cap MLX's free-buffer pool (0 = MLX's default, no cap). Uncapped, the pool inflated the
+    footprint past memory_gb (lagunaLab a1ca51e); capped at 1 GB both engines also decode faster
+    (results/bench_cap14.4_pool1.json)."""
     import mlx.core as mx
 
-    mx.set_cache_limit(1 << 30)
+    if gb:
+        mx.set_cache_limit(int(gb * (1 << 30)))
+
+
+def shared_machine():
+    """No wired limit (mlx-lm sets one at start and around every generation), so a machine in use
+    can page the engine's memory out instead of other programs'."""
+    import mlx.core as mx
+
     mx.set_wired_limit = lambda limit: 0
 
 
@@ -177,6 +185,7 @@ def main():
         path = sys.argv[i + 1]
         del sys.argv[i : i + 2]
     cfg = EngineConfig.read(path)
+    cap_buffer_pool(cfg.mlx_cache_gb)
     patch_server(server, cfg)
     sys.argv = sys.argv[:1] + server_argv(cfg) + sys.argv[1:]
     server.main()

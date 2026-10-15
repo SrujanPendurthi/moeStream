@@ -55,6 +55,7 @@ def test_absolute_paths_are_kept(tmp_path):
     ("port = 70000", "port"),
     ("kv_disk_gb = 0", "kv_disk_gb"),
     ('kv_tier = "on"', "kv_tier"),
+    ("mlx_cache_gb = -1", "mlx_cache_gb"),
 ])
 def test_bad_values_raise_naming_the_key(tmp_path, line, key):
     with pytest.raises(ValueError, match=key):
@@ -63,10 +64,16 @@ def test_bad_values_raise_naming_the_key(tmp_path, line, key):
 
 def test_tuning_keys_default_and_resolve(tmp_path):
     c = EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n'))
-    assert c.tune is True and c.trace_tokens == 65536
+    assert c.tune is False and c.trace_tokens == 65536   # the self-tuner ships off
     assert Path(c.tuning_dir) == tmp_path / "tuning"
     shipped = EngineConfig.read(REPO / "moestream.toml")
-    assert shipped.tune is True and Path(shipped.tuning_dir) == REPO / "tuning"
+    assert shipped.tune is False and Path(shipped.tuning_dir) == REPO / "tuning"
+
+
+def test_mlx_buffer_pool_cap_defaults_to_1_gb(tmp_path):
+    assert EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\n')).mlx_cache_gb == 1.0
+    assert EngineConfig.read(_write(tmp_path, 'pack_dir = "p"\nmlx_cache_gb = 0\n')).mlx_cache_gb == 0
+    assert EngineConfig.read(REPO / "moestream.toml").mlx_cache_gb == 1.0
 
 
 @pytest.mark.parametrize("line", ["tune = 1", "trace_tokens = 0", "tuning_dir = 3"])
