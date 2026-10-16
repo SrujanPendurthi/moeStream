@@ -40,14 +40,26 @@ def fingerprint(pack_dir, kv_bits):
     return f"v{FORMAT_VERSION} {h.hexdigest()[:16]} kv{kv_bits}"
 
 
-def write_atomic(path, write_fn):
-    """write_fn(f) fills <path>.tmp; then fsync and rename over path. Returns the size."""
+def write_atomic(path, write_fn, durable=False):
+    """write_fn(f) fills <path>.tmp; then fsync and rename over path. Returns the size.
+    durable (the manifest): F_FULLFSYNC, which also flushes the drive's cache (macOS fsync does not),
+    and an fsync of the directory after the rename, so a power loss keeps the rename. Costs a few ms
+    per manifest (once per turn); data files keep plain fsync."""
     tmp = Path(f"{path}.tmp")
     with open(tmp, "wb") as f:
         write_fn(f)
         f.flush()
-        os.fsync(f.fileno())
+        if durable and hasattr(fcntl, "F_FULLFSYNC"):
+            fcntl.fcntl(f.fileno(), fcntl.F_FULLFSYNC)
+        else:
+            os.fsync(f.fileno())
     os.replace(tmp, path)
+    if durable:
+        d = os.open(Path(path).parent, os.O_RDONLY)
+        try:
+            os.fsync(d)
+        finally:
+            os.close(d)
     return path.stat().st_size
 
 
@@ -162,20 +174,21 @@ class Store:
         self.dir, self.cap, self.alloc = Path(dir), cap_bytes, alloc
         self.dir.mkdir(parents=True, exist_ok=True)
         fmt = self.dir / "FORMAT"
+        # never touch a directory this tier did not create; FORMAT.tmp alone is a crash mid-create
+        if not fmt.exists() and any(f.name not in ("FORMAT.tmp", "LOCK") for f in self.dir.iterdir()):
+            raise ValueError(f"{self.dir} is not empty and has no FORMAT file: not a kv tier directory")
+        self._lock()
         if not fmt.exists():
-            # never wipe a directory this tier did not create; FORMAT.tmp alone is a crash mid-create
-            if any(f.name != "FORMAT.tmp" for f in self.dir.iterdir()):
-                raise ValueError(f"{self.dir} is not empty and has no FORMAT file: not a kv tier directory")
             write_atomic(fmt, lambda f: f.write(fingerprint.encode()))
         elif fmt.read_text() != fingerprint:
             log(f"format, pack or kv_bits changed ({fmt.read_text()} -> {fingerprint}): wiping {self.dir}")
             for d in self.dir.iterdir():  # the old FORMAT goes last, so a crash here wipes again next start
-                if d.name != "FORMAT":
+                if d.name not in ("FORMAT", "LOCK"):
                     shutil.rmtree(d) if d.is_dir() else d.unlink()
             write_atomic(fmt, lambda f: f.write(fingerprint.encode()))
         self.chains = {}
         for d in sorted(self.dir.iterdir()):
-            if d.name == "FORMAT":
+            if d.name in ("FORMAT", "LOCK"):
                 continue
             m = _load_chain(d) if d.is_dir() else None
             if m is None:
@@ -185,6 +198,26 @@ class Store:
         self.pending, self.busy, self.cv = {}, False, threading.Condition()
         self.writing, self.failures, self._seq = True, 0, 0
         threading.Thread(target=self._writer, daemon=True, name="kvtier-writer").start()
+        self.prune()  # a lowered kv_disk_gb applies now, not at the next write
+
+    _held = {}  # dir -> lock fd, per process: the same process may reopen its own directory
+
+    def _lock(self):
+        """One server per kv_dir: an exclusive flock on LOCK, which the kernel drops when the holding
+        process dies, so a killed server never leaves a stale lock."""
+        key = str(self.dir.resolve())
+        if key in Store._held:
+            return
+        fd = os.open(self.dir / "LOCK", os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            pid = os.pread(fd, 32, 0).decode(errors="replace").strip() or "?"
+            os.close(fd)
+            raise RuntimeError(f"{self.dir} is in use by another server (pid {pid}); give each server its own kv_dir")
+        os.ftruncate(fd, 0)
+        os.pwrite(fd, f"{os.getpid()}\n".encode(), 0)
+        Store._held[key] = fd
 
     def save(self, tokens, cache):
         """Queue a turn-end snapshot and return at once. A queued, older snapshot of the same
@@ -287,15 +320,21 @@ class Store:
                 else:
                     c.keys, c.values, c.offset = arr[f"{i}.0"], arr[f"{i}.1"], n
             mx.eval([c.state for c in cache])
-            os.utime(d / "manifest.json")  # last use, for pruning
-            return True
-        except Exception as e:
+        except (OSError, ValueError, KeyError, IndexError, struct.error, json.JSONDecodeError) as e:
             if self.chains.get(cid) is not m:  # the writer moved the chain on mid-read: not a bad chain
                 log(f"restore of chain {cid} at {n} tokens raced a newer turn ({e!r})")
                 return False
             log(f"restore of chain {cid} at {n} tokens failed ({e!r}): dropping it")
             self._drop(cid)
             return False
+        except Exception as e:  # not the files (memory, MLX): the chain stays
+            log(f"restore of chain {cid} at {n} tokens failed ({e!r}); chain kept")
+            return False
+        try:
+            os.utime(d / "manifest.json")  # last use, for pruning
+        except OSError:
+            pass
+        return True
 
     def _drop(self, cid):
         with self.cv:
@@ -304,12 +343,13 @@ class Store:
 
     def _chain_for(self, tokens, n):
         """The chain whose latest snapshot is the longest prefix of tokens, or (None, None)."""
-        with self.cv:
-            latest = {cid: m["snapshots"][-1] for cid, m in self.chains.items()}
+        with self.cv:  # one consistent view: a restore may drop a chain meanwhile
+            chains = dict(self.chains)
+        latest = {cid: m["snapshots"][-1] for cid, m in chains.items()}
         ok = [(s["n"], cid) for cid, s in latest.items() if s["n"] <= n]
         d = _digests(tokens, {k for k, _ in ok})
         k, cid = max(((k, cid) for k, cid in ok if d[k] == latest[cid]["sha"]), default=(0, None))
-        return cid, (self.chains[cid] if cid else None)
+        return cid, chains.get(cid)
 
     def _write(self, job):
         tokens, n = job["tokens"], job["n"]
@@ -332,7 +372,7 @@ class Store:
                   "segments": m["segments"] + [{"a": a, "b": n, "file": seg, "bytes": nb}],
                   "snapshots": [s for s in m["snapshots"] if s["turn"] % SLIDING_EVERY == 0 or s is m["snapshots"][-1]]
                   + [{"n": n, "sha": _digests(tokens, [n])[n], "turn": turn, "file": sl, "bytes": ns}]}
-            write_atomic(d / "manifest.json", lambda f: f.write(json.dumps(m2).encode()))
+            write_atomic(d / "manifest.json", lambda f: f.write(json.dumps(m2).encode()), durable=True)
         except BaseException:
             shutil.rmtree(d, ignore_errors=True) if new else [(d / f).unlink(missing_ok=True) for f in written]
             raise

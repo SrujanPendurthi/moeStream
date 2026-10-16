@@ -70,7 +70,7 @@ def test_a_different_fingerprint_wipes_the_directory(tmp_path):
     Store(tmp_path / "kv", FP)
     _chain(tmp_path / "kv", "c1", GOOD)
     s = Store(tmp_path / "kv", "v1 test kv0")
-    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]
+    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir() if f.name != "LOCK") == ["FORMAT"]
 
 
 def test_a_non_empty_directory_that_is_not_a_kv_tier_is_left_alone(tmp_path):
@@ -79,6 +79,7 @@ def test_a_non_empty_directory_that_is_not_a_kv_tier_is_left_alone(tmp_path):
     with pytest.raises(ValueError, match="FORMAT"):
         Store(tmp_path / "kv", FP)
     assert (tmp_path / "kv" / "notes.txt").read_text() == "mine"
+    assert not (tmp_path / "kv" / "LOCK").exists()                 # nothing written into it
 
 
 import threading
@@ -177,7 +178,7 @@ def test_three_failed_writes_in_a_row_turn_writes_off(tmp_path, monkeypatch):
     for i in range(3):
         _turns(s, 0, [10], base=i)
         assert s.writing is (i < 2)
-    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]
+    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir() if f.name != "LOCK") == ["FORMAT"]
     s.save(list(range(10)), _make(0))
     assert not s.pending
 
@@ -361,7 +362,7 @@ def test_a_crash_mid_wipe_keeps_the_old_format_so_the_next_start_wipes_again(tmp
     assert (tmp_path / "kv" / "FORMAT").read_text() == FP
     monkeypatch.setattr(kvtier, "write_atomic", real)
     s = Store(tmp_path / "kv", "v1 test kv0")
-    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir()) == ["FORMAT"]
+    assert s.chains == {} and sorted(f.name for f in (tmp_path / "kv").iterdir() if f.name != "LOCK") == ["FORMAT"]
 
 
 def test_the_writer_lets_go_of_a_written_snapshot(tmp_path):
@@ -382,3 +383,74 @@ def test_the_writer_lets_go_of_a_written_snapshot(tmp_path):
     gc.collect()
     mx.clear_cache()
     assert before - mx.get_active_memory() > 500_000    # the cache's buffers were freed
+
+
+def test_a_second_server_process_cannot_share_the_kv_dir_but_a_dead_ones_lock_does_not_block(tmp_path):
+    import subprocess
+    import sys
+
+    Store(tmp_path / "kv", FP)                                    # this process: holds the lock
+    code = ("import sys; sys.path[:0] = ['.', '../lagunaLab']\n"
+            "from moestream.kvtier import Store\n"
+            f"Store({str(tmp_path / 'kv')!r}, {FP!r})\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode != 0 and "in use by another server" in r.stderr
+    Store(tmp_path / "kv", FP)                                    # the same process may reopen it
+    other = tmp_path / "kv2"
+    held = subprocess.Popen([sys.executable, "-c", code.replace("'kv'", "'kv2'").replace(str(tmp_path / 'kv'), str(other))
+                             + "import time; time.sleep(60)\n"])
+    import time
+    for _ in range(100):
+        if (other / "LOCK").exists() and (other / "LOCK").read_text().strip():
+            break
+        time.sleep(0.1)
+    held.kill()
+    held.wait()                                                   # killed: the kernel drops its lock
+    Store(other, FP)
+
+
+def test_a_lowered_disk_cap_applies_at_startup(tmp_path):
+    s = Store(tmp_path / "kv", FP)
+    _turns(s, 0, [10], base=0)
+    _turns(s, 0, [10], base=100)
+    assert len(s.chains) == 2
+    small = Store(tmp_path / "kv", FP, cap_bytes=1)              # lowered cap, no write needed
+    assert small.chains == {}
+
+
+def test_a_restore_error_that_is_not_the_disk_keeps_the_chain(tiny, tmp_path):
+    def oom(n):
+        raise MemoryError("no host buffer")
+
+    s = Store(tmp_path / "kv", FP, alloc=oom)
+    s.save(TOK[:30], _prefill(tiny, [30]))
+    s.flush()
+    (cid,) = s.chains
+    assert s.restore(cid, 30, tiny.make_cache()) is False
+    assert cid in s.chains and (tmp_path / "kv" / cid).exists()
+
+
+def test_a_chain_dropped_while_the_writer_looks_it_up_is_not_a_write_failure(tmp_path, monkeypatch):
+    s = Store(tmp_path / "kv", FP)
+    _turns(s, 0, [10])
+    (cid,) = s.chains
+    real = kvtier._digests
+
+    def racing(tokens, ns):                                       # a restore drops the chain mid-lookup
+        s.chains.pop(cid, None)
+        return real(tokens, ns)
+
+    monkeypatch.setattr(kvtier, "_digests", racing)
+    s._chain_for(list(range(20)), 20)                             # must not raise KeyError
+
+
+def test_the_manifest_is_made_durable_with_a_full_fsync_and_a_directory_fsync(tmp_path, monkeypatch):
+    calls = []
+    real_fcntl, real_fsync = kvtier.fcntl.fcntl, os.fsync
+    monkeypatch.setattr(kvtier.fcntl, "fcntl", lambda fd, op, *a: calls.append(op) or real_fcntl(fd, op, *a))
+    monkeypatch.setattr(kvtier.os, "fsync", lambda fd: calls.append("fsync") or real_fsync(fd))
+    kvtier.write_atomic(tmp_path / "manifest.json", lambda f: f.write(b"{}"), durable=True)
+    assert kvtier.fcntl.F_FULLFSYNC in calls and calls.count("fsync") >= 1   # the file, then the directory
+    calls.clear()
+    kvtier.write_atomic(tmp_path / "seg.bin", lambda f: f.write(b"x"))
+    assert kvtier.fcntl.F_FULLFSYNC not in calls

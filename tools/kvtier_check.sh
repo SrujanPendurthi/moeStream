@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 REPO=$(pwd)
 OUT=${1:-results/kvtier}
 WATCH=${WATCH:-"4 16"}
-SERVE=${SERVE:-"/Users/srujanpendurthi/Projects/Current/.gpu/gpu-run moe tools/watch.sh $WATCH python3 -m tools.serve"}
+SERVE=${SERVE:-"$REPO/../.gpu/gpu-run moe tools/watch.sh $WATCH python3 -m tools.serve"}
 PAUSE=${PAUSE:-5}
 MEM=${MEM:-14.0}
 SESSIONS=astropy__astropy-12907.jsonl,django__django-10924.jsonl,astropy__astropy-6938.jsonl

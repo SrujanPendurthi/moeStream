@@ -94,7 +94,7 @@ def patch_server(server, cfg):
 
     def mem(event, **kw):
         """MOESTREAM_MEMLOG=<file>: MLX memory at the start and end of every request, as JSON lines.
-        peak_gb at "insert" is the request's peak (reset at each "fetch")."""
+        peak_gb at "fetch" is the fetch's own (an SSD restore); at "insert", the rest of the request."""
         if not memlog:
             return
         import mlx.core as mx
@@ -129,6 +129,10 @@ def patch_server(server, cfg):
                         tier_jobs=(len(st.pending) + st.busy) if st else 0)
 
         def fetch_nearest_cache(self, model, tokens):
+            if memlog:  # the fetch row's peak is then the fetch's own (an SSD restore), not the gap before it
+                import mlx.core as mx
+
+                mx.reset_peak_memory()
             cache, rest = self._fetch(model, tokens)
             mem("fetch", prompt_tokens=len(tokens), reused=len(tokens) - len(rest), **self._held())
             return cache, rest

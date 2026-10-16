@@ -392,3 +392,23 @@ def test_release_evicted_caches_keeps_turns_and_the_tier_working(tmp_path, monke
     n, out2, _ = _turn(model, ram, t2)
     assert n == len(T2) - 30                             # restored from SSD
     assert _turn(model, ram, t2 + out2 + [7, 8, 9])[0] == 3  # and a RAM hit on the turn after
+
+
+def test_the_memory_log_resets_the_peak_before_a_fetch_so_a_restore_is_its_own(tmp_path, monkeypatch):
+    import mlx.core as mx
+
+    monkeypatch.setenv("MOESTREAM_MEMLOG", str(tmp_path / "mem.log"))
+    model, LRU = _tiered(tmp_path, monkeypatch)
+    pc = LRU(6)
+    order = []
+    real_reset, real_fetch = mx.reset_peak_memory, pc._fetch
+    monkeypatch.setattr(mx, "reset_peak_memory", lambda: order.append("reset") or real_reset())
+    monkeypatch.setattr(pc, "_fetch", lambda m, t: order.append("fetch") or real_fetch(m, t))
+    pc.fetch_nearest_cache("k", T1)
+    assert order == ["reset", "fetch", "reset"]       # the fetch row's peak is the fetch's (restore) own
+
+
+def test_the_kvtier_check_script_has_no_user_specific_path():
+    from pathlib import Path
+
+    assert "/Users/" not in Path("tools/kvtier_check.sh").read_text()
