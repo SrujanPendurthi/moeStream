@@ -1,0 +1,67 @@
+{
+ "id": "E1",
+ "pack": "../lagunaLab/models/Laguna-XS-2.1-pruned-50-packed",
+ "kv_bits": 8,
+ "memory_gb": 12.0,
+ "refs": "../lagunaLab/refs/kv",
+ "sessions": {
+  "django__django-10914": {
+   "tokens": 78112,
+   "assistant_tokens": 21740,
+   "truncated": false,
+   "kl_top64_mean": 0.0014747567474842072,
+   "kl_top64_p99": 0.02544786036014557,
+   "top1_agree": 0.9937902483900644,
+   "peak_mem_gb": 9.787583206,
+   "tok_per_s": 78.93626390692296,
+   "ref_model": null
+  },
+  "django__django-10924": {
+   "tokens": 82196,
+   "assistant_tokens": 28551,
+   "truncated": false,
+   "kl_top64_mean": 0.0013699079863727093,
+   "kl_top64_p99": 0.024025075137615204,
+   "top1_agree": 0.9961122202374698,
+   "peak_mem_gb": 9.93231871,
+   "tok_per_s": 80.27510992266909,
+   "ref_model": null
+  },
+  "django__django-11001": {
+   "tokens": 80540,
+   "assistant_tokens": 43083,
+   "truncated": false,
+   "kl_top64_mean": 0.0008043919806368649,
+   "kl_top64_p99": 0.014692652970552444,
+   "top1_agree": 0.9975396328018011,
+   "peak_mem_gb": 9.977193686,
+   "tok_per_s": 68.5700362292408,
+   "ref_model": null
+  },
+  "django__django-11039": {
+   "tokens": 82671,
+   "assistant_tokens": 44204,
+   "truncated": false,
+   "kl_top64_mean": 0.0014608519850298762,
+   "kl_top64_p99": 0.013070154003798962,
+   "top1_agree": 0.9982580761921998,
+   "peak_mem_gb": 10.061869518,
+   "tok_per_s": 71.12255278411257,
+   "ref_model": null
+  }
+ },
+ "summary": {
+  "sessions": 4,
+  "failed": 0,
+  "assistant_tokens": 137578,
+  "kl_top64_mean": 0.0012386033774097064,
+  "kl_top64_p99_max": 0.02544786036014557,
+  "top1_agree": 0.9968817688874675,
+  "peak_mem_gb_max": 10.061869518
+ },
+ "gate": {
+  "kl": 0.02,
+  "top1": 0.98,
+  "pass": true
+ }
+}
