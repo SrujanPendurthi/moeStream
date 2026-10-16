@@ -89,8 +89,9 @@ def first_diff(ref_ids, got_ids):
     return None if len(ref_ids) == len(got_ids) else min(len(ref_ids), len(got_ids))
 
 
-def classify(model, prefix_ids, ref_ids, got_ids):
-    """"exact", "tie" (the first differing token was a near-tie under this model's own logits) or "real"."""
+def classify(model, prefix_ids, ref_ids, got_ids, chunk=2048):
+    """"exact", "tie" (the first differing token was a near-tie under this model's own logits) or "real".
+    The prefix is prefilled in chunks through the model's cache, as the references were built."""
     import mlx.core as mx
 
     i = first_diff(ref_ids, got_ids)
@@ -98,8 +99,12 @@ def classify(model, prefix_ids, ref_ids, got_ids):
         return "exact"
     if i >= len(ref_ids) or i >= len(got_ids):
         return "real"  # one stopped where the other went on: not a single-token flip
-    logits = model(mx.array([list(prefix_ids) + list(ref_ids[:i])]))[0, -1].astype(mx.float32)
-    return "tie" if is_tie(logits, ref_ids[i], got_ids[i]) else "real"
+    ids = [int(t) for t in prefix_ids] + [int(t) for t in ref_ids[:i]]  # .npz ids are numpy int32
+    cache = model.make_cache()
+    for k in range(0, len(ids), chunk):
+        logits = model(mx.array([ids[k:k + chunk]]), cache=cache)[0, -1]
+        mx.eval(logits)
+    return "tie" if is_tie(logits.astype(mx.float32), int(ref_ids[i]), int(got_ids[i])) else "real"
 
 
 def summarize(sessions):

@@ -88,6 +88,21 @@ def test_classify_agrees_with_is_tie_on_the_models_own_logits(tmp_path):
     assert classify(model, prefix, ref, got) == want
 
 
+def test_classify_takes_npz_int32_ids_and_chunks_the_prefix(tmp_path):
+    # A1 crashed here: reference ids come from .npz as numpy int32, which mx.array rejects in a list
+    import mlx.core as mx
+    import numpy as np
+
+    from tools.parity import classify, is_tie
+
+    model = _tiny(tmp_path)
+    prefix = np.array([5, 9, 13, 2, 7, 11, 4], dtype=np.int32)
+    logits = model(mx.array([prefix.tolist()]))[0, -1]
+    top2 = mx.argsort(-logits)[:2].tolist()
+    ref, got = [top2[0], 3], [top2[1], 3]
+    want = "tie" if is_tie(logits, top2[0], top2[1]) else "real"
+    assert classify(model, list(prefix), ref, got, chunk=3) == want
+
 def _tiny(tmp_path):
     from moestream.load import load
     from scripts.pack_experts import pack

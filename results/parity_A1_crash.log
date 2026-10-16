@@ -1,0 +1,22 @@
+moeStream: 4576 slots (8.10 GB), per layer 96-192, half-life 64, eviction lfu, kv 8-bit, KV for 1 session of 32768 tokens, activations 1.99 GB reserved
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/parity.py", line 295, in <module>
+    main()
+    ~~~~^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/parity.py", line 286, in main
+    rows, summary = action_rows(model, tok, s["refs"], a.sessions, tools, refs=refs)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/parity.py", line 191, in action_rows
+    kind = "exact" if w == g else classifier(model, list(ids[:st]), tok.encode(w, add_special_tokens=False),
+                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                             tok.encode(g, add_special_tokens=False))
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/srujanpendurthi/Projects/Current/moeStream/tools/parity.py", line 101, in classify
+    logits = model(mx.array([list(prefix_ids) + list(ref_ids[:i])]))[0, -1].astype(mx.float32)
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Invalid type int32 received in array initialization.
+watch: peak swap 512 MB, peak footprint 12288 MB
+exit 1
