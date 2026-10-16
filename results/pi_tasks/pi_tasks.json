@@ -1,0 +1,72 @@
+{
+ "rows": [
+  {
+   "engine": "moe",
+   "task": "mean",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 91
+  },
+  {
+   "engine": "moe",
+   "task": "words",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 99
+  },
+  {
+   "engine": "moe",
+   "task": "fizz",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 177
+  },
+  {
+   "engine": "lab",
+   "task": "mean",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 97
+  },
+  {
+   "engine": "lab",
+   "task": "words",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 95
+  },
+  {
+   "engine": "lab",
+   "task": "fizz",
+   "passed": true,
+   "pi_exit": 0,
+   "secs": 163
+  }
+ ],
+ "engines": {
+  "moe": {
+   "passed": 3,
+   "tasks": 3,
+   "server_errors": 0,
+   "aborted": false,
+   "watch_peak_mb": [
+    509,
+    11264
+   ]
+  },
+  "lab": {
+   "passed": 3,
+   "tasks": 3,
+   "server_errors": 0,
+   "aborted": false,
+   "watch_peak_mb": [
+    509,
+    8313
+   ]
+  }
+ },
+ "gate": {
+  "moe_engine_errors": 0,
+  "pass": true
+ }
+}

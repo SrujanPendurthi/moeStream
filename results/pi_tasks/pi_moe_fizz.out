@@ -1,0 +1,11 @@
+The bug has been fixed. The issues were:
+
+1. **Range issue**: The original code used `range(1, n)` which excluded the number `n`. Changed to `range(1, n + 1)` to include the number `n`.
+
+2. **Missing "Buzz" case**: The original code only handled the "Fizz" case for numbers divisible by 3, but didn't handle the "Buzz" case for numbers divisible by 5.
+
+The fix implements the classic FizzBuzz logic:
+- Returns "FizzBuzz" for numbers divisible by both 3 and 5
+- Returns "Fizz" for numbers divisible by 3
+- Returns "Buzz" for numbers divisible by 5
+- Returns the number as a string for all other cases

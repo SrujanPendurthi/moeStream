@@ -1,6 +1,6 @@
 # Parity eval: does the moeStream engine behave like the reference on agent tasks?
 
-Status: draft for review (2026-10-15). Sub-project 2 of the roadmap, first part: before the custom
+Status: approved 2026-10-15; all runs done 2026-10-16, every gate passed (results at the end). Sub-project 2 of the roadmap, first part: before the custom
 harness is built, establish that moeStream's engine reproduces the reference model, not only token
 by token but in the actions an agent takes. Docs only; the implementation plan follows approval.
 
@@ -137,3 +137,31 @@ repo).
 - Tests on the tiny model: summary weighting, the validity checker (valid, wrong name, bad JSON,
   missing required key), and a self-score of the tiny model through the moeStream loader giving KL 0,
   top-1 1.0 (as lagunaLab's `test_score_with_forward_callable`).
+
+## Results (2026-10-16)
+
+All gates passed, in run order. Every run: `gpu-run moe`, `watch.sh 4 17`, 3 GB swap guard, never
+triggered.
+
+| id | result | gate | file |
+|---|---|---|---|
+| E1 smoke (django-11019) | KL 0.0081, top-1 0.9922 | pass | `results/parity_E1_smoke.json` |
+| M1 (full pack vs 4-bit base, 16k) | KL 0.0032, top-1 0.9891 | pass | `results/parity_M1.json` |
+| E1 (pruned-50, q8 KV, full length) | KL 0.0020, top-1 0.9963 | pass | `results/parity_E1.json` |
+| E2 (pruned-50, bf16 KV) | KL 0.0, top-1 1.0 (exact) | pass | `results/parity_E2.json` |
+| A0 (own references) | 20/20 exact, 20/20 same tool, 20/20 valid calls | floor, so A1's exact threshold stays 14 | `results/parity_A0.json` |
+| A1 (vs `refs/prune_actions`) | 18/20 exact, 20/20 same tool, 20/20 valid calls, 0 real mismatches, 1 tie | pass | `results/parity_A1.json` |
+| T1 (pi, 3 tasks per server) | moeStream 3/3 completed (91, 99, 177 s), lagunaLab 3/3 (97, 95, 163 s); 0 server errors, no abort on either | pass | `results/pi_tasks/pi_tasks.json` |
+
+- E2 being exact puts all of E1's gap on q8 KV; streaming itself adds nothing.
+- A1's two inexact actions:
+  - **django-10914 @ 5464**: `find ... | head -30` in the reference,
+    `head -20` generated. Same tool, same argument keys. The first differing token's logit gap is
+    wider than 4 bf16 ulps, so `classify` calls it *real*; it is not counted in `real_mismatches`,
+    which (per the gate) counts only mismatches in tool name or argument structure.
+  - **django-11001 @ 6602**: a different `find`/`grep` pipeline, same tool and keys; first
+    differing token a tie.
+- A1's first attempt crashed in `classify` on numpy int32 ids from the `.npz` references (A0 never
+  reached it); fixed in b965854, crash log kept in `results/parity_A1_crash.log`.
+- Peaks: A0/A1 footprint 13.3 GB, swap 215/509 MB; T1 moeStream server footprint 11.3 GB
+  (lagunaLab's 8.3 GB), swap 509 MB.

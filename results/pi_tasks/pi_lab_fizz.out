@@ -1,0 +1,6 @@
+The bug has been fixed. The issues were:
+
+1. **Range off-by-one**: Changed `range(1, n)` to `range(1, n + 1)` so that `n` is included in the output
+2. **Missing Buzz case**: Added the check for divisibility by 5 to output "Buzz"
+
+The test now passes.

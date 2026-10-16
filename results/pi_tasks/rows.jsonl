@@ -1,0 +1,6 @@
+{"engine": "moe", "task": "mean", "passed": true, "pi_exit": 0, "secs": 91}
+{"engine": "moe", "task": "words", "passed": true, "pi_exit": 0, "secs": 99}
+{"engine": "moe", "task": "fizz", "passed": true, "pi_exit": 0, "secs": 177}
+{"engine": "lab", "task": "mean", "passed": true, "pi_exit": 0, "secs": 97}
+{"engine": "lab", "task": "words", "passed": true, "pi_exit": 0, "secs": 95}
+{"engine": "lab", "task": "fizz", "passed": true, "pi_exit": 0, "secs": 163}

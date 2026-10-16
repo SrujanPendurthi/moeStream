@@ -1,0 +1,1 @@
+{"moe": {"passed": 3, "tasks": 3, "server_errors": 0, "aborted": false, "watch_peak_mb": [509, 11264]}, "lab": {"passed": 3, "tasks": 3, "server_errors": 0, "aborted": false, "watch_peak_mb": [509, 8313]}} {"moe_engine_errors": 0, "pass": true}

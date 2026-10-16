@@ -1,0 +1,1 @@
+The fix is complete. The `reverse_words` function now correctly reverses the order of words in a string. For example, `"a b c"` becomes `"c b a"`.

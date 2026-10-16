@@ -1,0 +1,5 @@
+pack_dir = "/Users/srujanpendurthi/Projects/Current/moeStream/../lagunaLab/models/Laguna-XS-2.1-packed"
+memory_gb = 14.0
+calibration = "/Users/srujanpendurthi/Projects/Current/moeStream/budget.json"
+tune = false
+kv_dir = "/Users/srujanpendurthi/Projects/Current/moeStream/results/pi_tasks/kvcache"
