@@ -1,0 +1,25 @@
+moeStream: 4576 slots (8.10 GB), per layer 96-192, half-life 64, eviction lfu, kv 8-bit, KV for 1 session of 32768 tokens, activations 1.99 GB reserved
+[transformers] The tokenizer you are loading from '../lagunaLab/models/Laguna-XS-2.1-packed' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+django__django-10914 5464 False True real
+django__django-10914 6301 True True exact
+django__django-10914 6984 True True exact
+django__django-10914 14343 True True exact
+django__django-10924 7740 True True exact
+django__django-10924 9112 True True exact
+django__django-10924 9345 True True exact
+django__django-10924 12105 True True exact
+django__django-11001 6602 False True tie
+django__django-11001 7587 True True exact
+django__django-11001 7907 True True exact
+django__django-11001 14980 True True exact
+django__django-11019 7317 True True exact
+django__django-11019 13257 True True exact
+django__django-11019 14694 True True exact
+django__django-11019 14910 True True exact
+django__django-11039 6494 True True exact
+django__django-11039 7660 True True exact
+django__django-11039 7871 True True exact
+django__django-11039 15629 True True exact
+summary: {"n": 20, "exact": 18, "same_tool": 20, "calls_total": 20, "calls_valid": 20, "real_mismatches": 0, "ties": 1} gate: {"pass": true}
+watch: peak swap 509 MB, peak footprint 13312 MB
+exit 0
