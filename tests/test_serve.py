@@ -412,3 +412,25 @@ def test_the_kvtier_check_script_has_no_user_specific_path():
     from pathlib import Path
 
     assert "/Users/" not in Path("tools/kvtier_check.sh").read_text()
+
+
+@pytest.mark.parametrize("wired, shared, raised", [(False, None, False), (True, None, True), (True, "1", False)])
+def test_the_wired_limit_is_left_alone_by_default(monkeypatch, capsys, wired, shared, raised):
+    import mlx.core as mx
+
+    import tools.serve as serve
+
+    calls = []
+    monkeypatch.setattr(mx, "set_wired_limit", lambda n: calls.append(n) or 0)
+    if shared:
+        monkeypatch.setenv("MOESTREAM_SHARED", shared)
+    else:
+        monkeypatch.delenv("MOESTREAM_SHARED", raising=False)
+    serve.apply_wired_limit(EngineConfig(pack_dir="/p", wired_limit=wired))
+    mx.set_wired_limit(1 << 34)                         # what mlx_lm.server.main does at startup
+    assert bool(calls) == raised
+    assert ("wired limit " + ("on" if raised else "off")) in capsys.readouterr().err
+
+
+def test_wired_limit_defaults_to_false():
+    assert EngineConfig(pack_dir="/p").wired_limit is False

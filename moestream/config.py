@@ -41,6 +41,7 @@ class EngineConfig:
     kv_sessions: int = 1
     prompt_cache_entries: int = 6
     release_evicted_caches: bool = False
+    wired_limit: bool = False
 
     @classmethod
     def read(cls, path):
@@ -81,6 +82,7 @@ class EngineConfig:
             "kv_sessions": _int(self.kv_sessions) and self.kv_sessions >= 1,
             "prompt_cache_entries": _int(self.prompt_cache_entries) and self.prompt_cache_entries >= 1,
             "release_evicted_caches": isinstance(self.release_evicted_caches, bool),
+            "wired_limit": isinstance(self.wired_limit, bool),
         }
         for key, ok in rules.items():
             if not ok:

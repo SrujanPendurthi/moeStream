@@ -254,6 +254,18 @@ def cap_buffer_pool(gb):
         mx.set_cache_limit(int(gb * (1 << 30)))
 
 
+def apply_wired_limit(cfg):
+    """mlx_lm.server.main() wires the whole recommended working set at startup (and generation wires
+    again), which pins memory the rest of the machine needs: it stalled video playback while the
+    server ran. Off by default; wired_limit = true opts in on a dedicated machine. MOESTREAM_SHARED=1
+    keeps it off whatever the config says."""
+    on = cfg.wired_limit and os.environ.get("MOESTREAM_SHARED") != "1"
+    if not on:
+        shared_machine()
+    print(f"moeStream: wired limit {'on (wired_limit = true)' if on else 'off: memory stays pageable for other apps'}",
+          file=sys.stderr)
+
+
 def shared_machine():
     """No wired limit (mlx-lm sets one at start and around every generation), so a machine in use
     can page the engine's memory out instead of other programs'."""
@@ -265,9 +277,6 @@ def shared_machine():
 def main():
     import mlx_lm.server as server
 
-    if os.environ.get("MOESTREAM_SHARED") == "1":
-        shared_machine()
-
     import scripts.serve_streaming  # noqa: F401  installs lagunaLab's SSE keepalive filter on the handler
 
     path = "moestream.toml"
@@ -276,6 +285,7 @@ def main():
         path = sys.argv[i + 1]
         del sys.argv[i : i + 2]
     cfg = EngineConfig.read(path)
+    apply_wired_limit(cfg)  # before server.main(), which would raise it
     cap_buffer_pool(cfg.mlx_cache_gb)
     patch_server(server, cfg)
     sys.argv = sys.argv[:1] + server_argv(cfg) + sys.argv[1:]

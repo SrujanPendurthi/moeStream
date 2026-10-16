@@ -52,7 +52,8 @@ bf16 KV and lookahead off moeStream is within 4% of lagunaLab (113.3 vs 108.8 ms
 reserve is 1.3 GB + 0.021 GB per 1k context tokens instead of a flat 1 GB; KV is reserved for one
 session (`kv_sessions = 1`), the SSD tier holding the other conversations, so the default keeps 5.94 GB
 of slots at 128k (was 6.12 GB with a flat reserve and two sessions); bf16 KV at 81k fits at `memory_gb = 12`
-with `release_evicted_caches = true` (opt-in).
+with `release_evicted_caches = true` (opt-in). The server no longer wires memory (`wired_limit = false`):
+mlx-lm's startup wired the whole working set and stalled video playback on the shared laptop.
 
 ## Results (warm, `results/bench.json`, superseded: uncapped pool, Phase 1)
 
